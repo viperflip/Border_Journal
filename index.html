@@ -1,1687 +1,256 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Журнал выездов - Система смен</title>
-  <style>
-    /* Базовые стили */
-    * {
-      font-family: Consolas, monospace !important;
-    }
-    
-    body { 
-      margin: 0; 
-      padding: 8px; 
-      background: #f4f4f4; 
-      color: #333;
-      font-size: 12px;
-      transition: all 0.3s ease;
-    }
-    
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    
-    /* Вкладки */
-    .tabs {
-      display: flex;
-      margin-bottom: 10px;
-      border-bottom: 1px solid #ddd;
-    }
-    
-    .tab {
-      padding: 6px 12px;
-      cursor: pointer;
-      border: 1px solid transparent;
-      border-bottom: none;
-      border-radius: 4px 4px 0 0;
-      margin-right: 4px;
-      background: #f8f9fa;
-      font-size: 11px;
-    }
-    
-    .tab.active {
-      background: white;
-      border-color: #ddd;
-      font-weight: bold;
-    }
-    
-    .tab-content {
-      display: none;
-    }
-    
-    .tab-content.active {
-      display: block;
-    }
-    
-    /* ОБЩИЕ СТИЛИ КОМПОНЕНТОВ */
-    .form { 
-      background: white; 
-      padding: 12px; 
-      border-radius: 6px; 
-      box-shadow: 0 1px 5px rgba(0,0,0,0.1); 
-      margin-bottom: 12px; 
-      transition: all 0.3s ease;
-    }
-    
-    .form-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin: 0 0 8px 0;
-      color: #651D1C;
-      border-bottom: 1px solid #dee2e6;
-      padding-bottom: 6px;
-      font-size: 14px;
-    }
-    
-    .theme-controls {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .theme-label {
-      font-size: 11px;
-      font-weight: bold;
-      white-space: nowrap;
-    }
-    
-    .theme-checkbox {
-      width: 14px;
-      height: 14px;
-      cursor: pointer;
-      accent-color: #651D1C;
-    }
-    
-    .color-scheme-select {
-      padding: 2px 4px;
-      font-size: 10px;
-      border: 1px solid #ced4da;
-      border-radius: 3px;
-      background: white;
-      cursor: pointer;
-      min-width: 80px;
-    }
-    
-    .shift-info {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-      padding: 4px;
-      background: #f8f9fa;
-      border-radius: 4px;
-      font-size: 11px;
-    }
-    
-    .shift-name-input {
-      flex: 1;
-      margin-right: 8px;
-      padding: 4px 6px;
-      border: 1px solid #ced4da;
-      border-radius: 3px;
-      font-size: 11px;
-    }
-    
-    .form-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    
-    .form-group {
-      flex: 1;
-      min-width: 140px;
-    }
-    
-    label {
-      display: block;
-      margin-bottom: 2px;
-      font-weight: bold;
-      font-size: 11px;
-    }
-    
-    input, select { 
-      padding: 4px 6px; 
-      font-size: 11px; 
-      width: 100%; 
-      border: 1px solid #ced4da; 
-      border-radius: 3px; 
-      box-sizing: border-box;
-      height: 28px;
-      transition: all 0.2s;
-    }
-    
-    input:focus, select:focus {
-      border-color: #651D1C;
-      outline: none;
-      box-shadow: 0 0 0 2px rgba(101, 29, 28, 0.25);
-    }
-    
-    .time-group {
-      display: flex;
-      gap: 4px;
-    }
-    
-    .time-group input {
-      flex: 1;
-    }
-    
-    button {
-      border: none;
-      border-radius: 3px;
-      cursor: pointer;
-      transition: all 0.2s;
-      font-size: 11px;
-    }
-    
-    button.now { 
-      background: white; 
-      color: #333; 
-      border: 1px solid #ced4da;
-      width: 50px; 
-      height: 28px; 
-      font-size: 10px; 
-    }
-    
-    button.now:hover { 
-      background: #f8f9fa; 
-    }
-    
-    .form-actions {
-      display: flex;
-      gap: 6px;
-      margin-top: 12px;
-    }
-    
-    .form-actions button {
-      padding: 6px;
-      flex: 1;
-      height: 30px;
-    }
-    
-    button.add, button.print, button.clear { 
-      background: white; 
-      color: #333; 
-      border: 1px solid #ced4da;
-      font-weight: bold;
-    }
-    
-    button.add:hover, button.print:hover, button.clear:hover { 
-      background: #f8f9fa; 
-    }
-    
-    button.finish-shift {
-      background: #651D1C;
-      color: white;
-      font-weight: bold;
-    }
-    
-    button.finish-shift:hover {
-      background: #4d1514;
-    }
-    
-    .table-container {
-      background: white;
-      border-radius: 6px;
-      box-shadow: 0 1px 5px rgba(0,0,0,0.1);
-      overflow-x: auto;
-      margin-bottom: 12px;
-      transition: all 0.3s ease;
-    }
-    
-    table { 
-      width: 100%; 
-      border-collapse: collapse; 
-      font-size: 10px; 
-      min-width: 850px;
-    }
-    
-    th, td { 
-      border: 1px solid #dee2e6; 
-      padding: 3px; 
-      text-align: center; 
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 110px;
-    }
-    
-    th { 
-      background: #651D1C; 
-      color: white; 
-      position: sticky;
-      top: 0;
-      font-weight: bold;
-      font-size: 10px;
-      padding: 4px 3px;
-    }
-    
-    tr:nth-child(even) {
-      background-color: #f8f9fa;
-    }
-    
-    tr:hover {
-      background-color: #e9ecef;
-    }
-    
-    .actions-cell {
-      display: flex;
-      justify-content: center;
-      gap: 2px;
-      white-space: nowrap;
-    }
-    
-    .edit-btn, .delete-btn {
-      padding: 2px 5px;
-      border: none;
-      border-radius: 2px;
-      cursor: pointer;
-      font-size: 9px;
-    }
-    
-    .edit-btn {
-      background: #ffc107;
-      color: #212529;
-    }
-    
-    .delete-btn {
-      background: #dc3545;
-      color: white;
-    }
-    
-    /* Стили для вкладки истории */
-    .history-list {
-      background: white;
-      border-radius: 6px;
-      box-shadow: 0 1px 5px rgba(0,0,0,0.1);
-      padding: 10px;
-      max-height: 500px;
-      overflow-y: auto;
-    }
-    
-    .history-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 6px 8px;
-      border-bottom: 1px solid #eee;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    
-    .history-item:hover {
-      background: #f8f9fa;
-    }
-    
-    .history-item:last-child {
-      border-bottom: none;
-    }
-    
-    .history-name {
-      font-weight: bold;
-      flex: 2;
-    }
-    
-    .history-date {
-      flex: 1;
-      color: #6c757d;
-      font-size: 10px;
-    }
-    
-    .history-count {
-      flex: 0.5;
-      text-align: center;
-      background: #e9ecef;
-      border-radius: 10px;
-      padding: 1px 6px;
-      font-size: 10px;
-    }
-    
-    .history-actions {
-      flex: 1;
-      text-align: right;
-    }
-    
-    .view-btn, .delete-history-btn {
-      background: #651D1C;
-      color: white;
-      border: none;
-      border-radius: 3px;
-      padding: 3px 8px;
-      cursor: pointer;
-      font-size: 10px;
-      margin-left: 4px;
-    }
-    
-    .view-btn:hover {
-      background: #4d1514;
-    }
-    
-    .delete-history-btn {
-      background: #dc3545;
-    }
-    
-    .delete-history-btn:hover {
-      background: #c82333;
-    }
-    
-    /* Модальное окно просмотра смены */
-    .modal {
-      display: none;
-      position: fixed;
-      z-index: 1001;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0,0,0,0.5);
-    }
-    
-    .modal-content {
-      background-color: white;
-      margin: 2% auto;
-      padding: 15px;
-      border-radius: 8px;
-      width: 95%;
-      max-width: 1200px;
-      max-height: 90vh;
-      overflow: auto;
-      position: relative;
-    }
-    
-    .modal-close {
-      position: absolute;
-      top: 10px;
-      right: 15px;
-      font-size: 20px;
-      cursor: pointer;
-      color: #6c757d;
-    }
-    
-    .modal-close:hover {
-      color: #495057;
-    }
-    
-    .modal-title {
-      margin-top: 0;
-      color: #651D1C;
-      border-bottom: 1px solid #dee2e6;
-      padding-bottom: 8px;
-    }
-    
-    /* СТАТИСТИКА */
-    .stats-container {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-      font-size: 11px;
-    }
-    
-    .stat-item {
-      background: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    
-    .stat-value {
-      font-weight: bold;
-      color: #651D1C;
-    }
-    
-    /* ПОИСК И ФИЛЬТРЫ */
-    .search-container {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-    }
-    
-    .search-input {
-      flex: 1;
-      min-width: 200px;
-    }
-    
-    /* ТЕМНАЯ ТЕМА */
-    body.theme-dark {
-      background: #1a1d23;
-      color: #e9ecef;
-    }
-    
-    .theme-dark .form {
-      background: #2d3239;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
-    
-    .theme-dark .form-header {
-      color: #b86b69;
-      border-color: #495057;
-    }
-    
-    .theme-dark .shift-info {
-      background: #343a40;
-      color: #e9ecef;
-    }
-    
-    .theme-dark input, .theme-dark select {
-      border-color: #495057;
-      background: #343a40;
-      color: #e9ecef;
-    }
-    
-    .theme-dark input:focus, .theme-dark select:focus {
-      border-color: #b86b69;
-      outline: none;
-      box-shadow: 0 0 0 2px rgba(184, 107, 105, 0.25);
-    }
-    
-    .theme-dark button.now { 
-      background: #343a40; 
-      color: #e9ecef; 
-      border-color: #495057;
-    }
-    
-    .theme-dark button.now:hover { 
-      background: #495057; 
-    }
-    
-    .theme-dark button.add, .theme-dark button.print, .theme-dark button.clear { 
-      background: #343a40; 
-      color: #e9ecef; 
-      border-color: #495057;
-    }
-    
-    .theme-dark button.add:hover, .theme-dark button.print:hover, .theme-dark button.clear:hover { 
-      background: #495057; 
-    }
-    
-    .theme-dark button.finish-shift {
-      background: #b86b69;
-      color: white;
-    }
-    
-    .theme-dark button.finish-shift:hover {
-      background: #a55a58;
-    }
-    
-    .theme-dark .table-container {
-      background: #2d3239;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
-    
-    .theme-dark th { 
-      background: #b86b69; 
-      color: white; 
-      border-color: #495057;
-    }
-    
-    .theme-dark td { 
-      border-color: #495057;
-      background: #2d3239;
-      color: #e9ecef;
-    }
-    
-    .theme-dark tr:nth-child(even) {
-      background-color: #262a30;
-    }
-    
-    .theme-dark tr:hover {
-      background-color: #343a40;
-    }
-    
-    .theme-dark .edit-btn {
-      background: #ffd43b;
-      color: #212529;
-    }
-    
-    .theme-dark .delete-btn {
-      background: #ff6b6b;
-      color: white;
-    }
-    
-    .theme-dark .history-list {
-      background: #2d3239;
-      color: #e9ecef;
-    }
-    
-    .theme-dark .history-item {
-      border-bottom-color: #495057;
-    }
-    
-    .theme-dark .history-item:hover {
-      background: #343a40;
-    }
-    
-    .theme-dark .history-date {
-      color: #adb5bd;
-    }
-    
-    .theme-dark .history-count {
-      background: #495057;
-      color: #e9ecef;
-    }
-    
-    .theme-dark .modal-content {
-      background: #2d3239;
-      color: #e9ecef;
-    }
-    
-    .theme-dark .modal-close {
-      color: #adb5bd;
-    }
-    
-    .theme-dark .modal-close:hover {
-      color: #e9ecef;
-    }
-    
-    .theme-dark .modal-title {
-      color: #b86b69;
-      border-color: #495057;
-    }
-    
-    .theme-dark .tabs {
-      border-color: #495057;
-    }
-    
-    .theme-dark .tab {
-      background: #343a40;
-      color: #e9ecef;
-    }
-    
-    .theme-dark .tab.active {
-      background: #2d3239;
-      border-color: #495057;
-    }
-    
-    .theme-dark .stat-item {
-      background: #2d3239;
-      color: #e9ecef;
-    }
-    
-    .theme-dark .stat-value {
-      color: #b86b69;
-    }
-    
-    .theme-dark .color-scheme-select {
-      background: #343a40;
-      color: #e9ecef;
-      border-color: #495057;
-    }
-
-    /* ОБЩИЕ СТИЛИ ДЛЯ ВСЕХ ТЕМ */
-    @media print {
-      .form, .print, .actions-cell, .tabs, .shift-info, .finish-shift, .search-container, .stats-container, .theme-controls {
-        display: none;
-      }
-      
-      body {
-        background: white;
-        padding: 0;
-      }
-      
-      .table-container {
-        box-shadow: none;
-        overflow-x: visible;
-      }
-      
-      table {
-        font-size: 9px;
-        min-width: auto;
-      }
-      
-      th, td {
-        padding: 2px;
-        max-width: none;
-      }
-    }
-    
-    @media (max-width: 768px) {
-      .container {
-        padding: 4px;
-      }
-      
-      .form {
-        padding: 8px;
-      }
-      
-      .form-row {
-        gap: 6px;
-      }
-      
-      .form-group {
-        min-width: 100%;
-      }
-      
-      .form-actions {
-        flex-direction: column;
-      }
-      
-      .shift-info {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-      
-      .shift-name-input {
-        margin-right: 0;
-        margin-bottom: 6px;
-        width: 100%;
-      }
-      
-      .search-container {
-        flex-direction: column;
-      }
-      
-      .stats-container {
-        flex-direction: column;
-      }
-      
-      .form-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
-      }
-      
-      .theme-controls {
-        align-self: flex-end;
-      }
-    }
-    
-    .notification {
-      position: fixed;
-      top: 8px;
-      right: 8px;
-      padding: 8px 12px;
-      border-radius: 3px;
-      color: white;
-      font-weight: bold;
-      opacity: 0;
-      transition: opacity 0.3s;
-      z-index: 1000;
-      font-size: 11px;
-    }
-    
-    .notification.success {
-      background: #28a745;
-    }
-    
-    .notification.error {
-      background: #dc3545;
-    }
-    
-    .notification.warning {
-      background: #651D1C;
-      color: white;
-    }
-    
-    .notification.info {
-      background: #17a2b8;
-      color: white;
-    }
-    
-    .notification.show {
-      opacity: 1;
-    }
-    
-    .modal-buttons {
-      display: flex;
-      gap: 6px;
-      margin-top: 12px;
-    }
-    
-    .modal-confirm {
-      background: #dc3545;
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 3px;
-      cursor: pointer;
-      flex: 1;
-      font-size: 11px;
-    }
-    
-    .modal-cancel {
-      background: #6c757d;
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 3px;
-      cursor: pointer;
-      flex: 1;
-      font-size: 11px;
-    }
-    
-    .auto-save-status {
-      font-size: 10px;
-      color: #6c757d;
-      margin-left: 8px;
-    }
-    
-    .theme-dark .auto-save-status {
-      color: #adb5bd;
-    }
-    
-    .highlight {
-      background-color: #fff3cd !important;
-    }
-    
-    .theme-dark .highlight {
-      background-color: #856404 !important;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Журнал заявок - Система смен</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body class="theme-standard">
-  <div class="container">
-    <div class="tabs">
-      <div class="tab active" data-tab="current">Текущая смена</div>
-      <div class="tab" data-tab="history">История смен</div>
-    </div>
-    
-    <!-- Вкладка текущей смены -->
-    <div id="current-tab" class="tab-content active">
-      <div class="stats-container" id="currentStats">
-        <!-- Статистика будет добавляться здесь -->
-      </div>
-      
-      <div class="search-container">
-        <input type="text" id="searchInput" class="search-input" placeholder="Поиск по таблице...">
-        <select id="filterType">
-          <option value="">Все типы</option>
-          <option value="А">Адрес</option>
-          <option value="У">Улица</option>
-        </select>
-        <button onclick="clearSearch()">Сбросить</button>
-      </div>
-      
-      <div class="form">
-        <div class="form-header">
-          <span>Новая заявка</span>
-          <div class="theme-controls">
-            <label class="theme-label" for="themeToggle">Тёмная</label>
-            <input type="checkbox" id="themeToggle" class="theme-checkbox">
-            <select id="colorScheme" class="color-scheme-select">
-              <option value="#651D1C">Красный</option>
-              <option value="#3F4AC4">Синий</option>
-              <option value="#3FA34D">Зелёный</option>
-              <option value="#7FB446">Салатовый</option>
-              <option value="#FBAF00">Оранжевый</option>
-              <option value="#2F3269">Тёмно-синий</option>
-              <option value="#8EA208">Оливковый</option>
-              <option value="#F49F0A">Жёлтый</option>
-              <option value="#76955E">Серо-зелёный</option>
-              <option value="#AFB884">Бежевый</option>
-              <option value="#23231F">Чёрный</option>
-            </select>
-          </div>
-        </div>
-        
-        <div class="shift-info">
-          <input type="text" id="shiftName" class="shift-name-input" placeholder="Название смены">
-          <button class="finish-shift" onclick="finishShift()">Завершить смену</button>
-        </div>
-        
-        <div class="form-row">
-          <div class="form-group">
-            <label for="num">№ заявки</label>
-            <input type="number" id="num" />
-          </div>
-          
-          <div class="form-group">
-            <label for="type">Тип</label>
-            <select id="type">
-              <option value="А">Адрес</option>
-              <option value="У">Улица</option>
-            </select>
-          </div>
-        </div>
-        
-        <div class="form-row">
-          <div class="form-group">
-            <label for="time1">Получено (чч:мм)</label>
-            <div class="time-group">
-              <input type="text" id="time1" placeholder="чч:мм" maxlength="5" />
-              <button class="now" onclick="setNow('time1')">Сейчас</button>
-            </div>
-          </div>
-          
-          <div class="form-group">
-            <label for="time2">Прибыл (чч:мм)</label>
-            <div class="time-group">
-              <input type="text" id="time2" placeholder="чч:мм" maxlength="5" />
-              <button class="now" onclick="setNow('time2')">Сейчас</button>
-            </div>
-          </div>
-          
-          <div class="form-group">
-            <label for="time3">Убыл (чч:мм)</label>
-            <div class="time-group">
-              <input type="text" id="time3" placeholder="чч:мм" maxlength="5" />
-              <button class="now" onclick="setNow('time3')">Сейчас</button>
-            </div>
-          </div>
-        </div>
-        
-        <div class="form-row">
-          <div class="form-group">
-            <label for="kusp">КУСП</label>
-            <input type="text" id="kusp" />
-          </div>
-          <div class="form-group">
-            <label for="desc">Описание</label>
-            <input type="text" id="desc" />
-          </div>
-        </div>
-        
-        <div class="form-row">
-          <div class="form-group">
-            <label for="addr">Адрес</label>
-            <input type="text" id="addr" />
-          </div>
-          <div class="form-group">
-            <label for="result">Результат</label>
-            <input type="text" id="result" />
-          </div>
-        </div>
-        
-        <div class="form-actions">
-          <button class="add" onclick="addRow()">Добавить</button>
-          <button class="print" onclick="window.print()">Печать</button>
-          <button class="clear" onclick="showClearConfirmation()">Очистить все</button>
-        </div>
-      </div>
-      
-      <div class="table-container">
-        <table id="journal">
-          <thead>
-            <tr>
-              <th>№</th>
-              <th>А/У</th>
-              <th>Получено</th>
-              <th>Прибыл</th>
-              <th>Убыл</th>
-              <th>КУСП</th>
-              <th>Описание</th>
-              <th>Адрес</th>
-              <th>Результат</th>
-              <th width="70">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Данные будут добавляться сюда -->
-          </tbody>
-        </table>
-      </div>
-    </div>
-    
-    <!-- Вкладка истории смен -->
-    <div id="history-tab" class="tab-content">
-      <div class="stats-container" id="historyStats">
-        <!-- Статистика истории будет здесь -->
-      </div>
-      
-      <div class="search-container">
-        <input type="text" id="historySearch" class="search-input" placeholder="Поиск по названию смены...">
-        <button onclick="clearHistorySearch()">Сбросить</button>
-      </div>
-      
-      <div class="history-list" id="historyList">
-        <!-- Список смен будет добавляться сюда -->
-      </div>
-    </div>
-  </div>
-  
-  <!-- Модальное окно подтверждения очистки -->
-  <div id="clearModal" class="modal">
-    <div class="modal-content">
-      <h3>Подтверждение очистки</h3>
-      <p>Вы уверены, что хотите удалить ВСЕ данные текущей смены? Это действие нельзя отменить.</p>
-      <div class="modal-buttons">
-        <button class="modal-cancel" onclick="hideClearConfirmation()">Отмена</button>
-        <button class="modal-confirm" onclick="clearAllData()">Очистить всё</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Модальное окно просмотра смены -->
-  <div id="viewShiftModal" class="modal">
-    <div class="modal-content">
-      <span class="modal-close" onclick="hideViewShiftModal()">&times;</span>
-      <h3 class="modal-title" id="viewShiftTitle">Просмотр смены</h3>
-      <div class="table-container">
-        <table id="viewShiftTable">
-          <thead>
-            <tr>
-              <th>№</th>
-              <th>А/У</th>
-              <th>Получено</th>
-              <th>Прибыл</th>
-              <th>Убыл</th>
-              <th>КУСП</th>
-              <th>Описание</th>
-              <th>Адрес</th>
-              <th>Результат</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Данные смены будут добавляться сюда -->
-          </tbody>
-        </table>
-      </div>
-      <div class="modal-buttons">
-        <button class="modal-cancel" onclick="hideViewShiftModal()">Закрыть</button>
-      </div>
-    </div>
-  </div>
-  
-  <div id="notification" class="notification"></div>
 
-  <script>
-    // Глобальные переменные
-    let currentShift = {
-      id: null,
-      name: '',
-      startTime: null,
-      entries: [],
-      autoSaved: false
-    };
-    
-    let shiftHistory = [];
-    let editingRow = null;
-    let autoSaveInterval = null;
-    let currentSearchTerm = '';
-    let currentFilterType = '';
-    let currentColorScheme = '#651D1C';
-    
-    // Загрузка темы из localStorage
-    function loadTheme() {
-      const savedTheme = localStorage.getItem('journalTheme') || 'standard';
-      const isDark = savedTheme === 'dark';
-      const savedColor = localStorage.getItem('journalColor') || '#651D1C';
-      
-      document.getElementById('themeToggle').checked = isDark;
-      document.getElementById('colorScheme').value = savedColor;
-      
-      setTheme(isDark ? 'dark' : 'standard', false);
-      setColorScheme(savedColor, false);
-    }
-    
-    // Установка темы
-    function setTheme(themeName, save = true) {
-      document.body.className = 'theme-' + themeName;
-      
-      if (save) {
-        localStorage.setItem('journalTheme', themeName);
-      }
-      
-      updateThemeColors();
-    }
-    
-    // Установка цветовой схемы
-    function setColorScheme(color, save = true) {
-      currentColorScheme = color;
-      
-      if (save) {
-        localStorage.setItem('journalColor', color);
-      }
-      
-      updateThemeColors();
-    }
-    
-    // Обновление цветов темы
-    function updateThemeColors() {
-      const isDark = document.body.classList.contains('theme-dark');
-      const root = document.documentElement;
-      
-      // Обновляем основные цвета
-      const primaryColor = currentColorScheme;
-      const lightColor = isDark ? lightenColor(primaryColor, 30) : primaryColor;
-      const darkColor = isDark ? primaryColor : darkenColor(primaryColor, 20);
-      
-      // Применяем цвета к элементам
-      const style = document.createElement('style');
-      style.id = 'dynamic-colors';
-      style.textContent = `
-        .theme-standard button.finish-shift,
-        .theme-standard th,
-        .theme-standard .view-btn {
-          background: ${primaryColor} !important;
-        }
-        
-        .theme-standard button.finish-shift:hover,
-        .theme-standard .view-btn:hover {
-          background: ${darkColor} !important;
-        }
-        
-        .theme-standard h2,
-        .theme-standard .form-header,
-        .theme-standard .stat-value {
-          color: ${primaryColor} !important;
-        }
-        
-        .theme-standard input:focus, 
-        .theme-standard select:focus {
-          border-color: ${primaryColor} !important;
-          box-shadow: 0 0 0 2px ${primaryColor}33 !important;
-        }
-        
-        .theme-dark button.finish-shift,
-        .theme-dark th,
-        .theme-dark .view-btn {
-          background: ${lightColor} !important;
-        }
-        
-        .theme-dark button.finish-shift:hover,
-        .theme-dark .view-btn:hover {
-          background: ${primaryColor} !important;
-        }
-        
-        .theme-dark .form-header,
-        .theme-dark .modal-title,
-        .theme-dark .stat-value {
-          color: ${lightColor} !important;
-        }
-        
-        .theme-dark input:focus, 
-        .theme-dark select:focus {
-          border-color: ${lightColor} !important;
-          box-shadow: 0 0 0 2px ${lightColor}33 !important;
-        }
-      `;
-      
-      // Удаляем старые стили и добавляем новые
-      const oldStyle = document.getElementById('dynamic-colors');
-      if (oldStyle) oldStyle.remove();
-      document.head.appendChild(style);
-    }
-    
-    // Функции для работы с цветами
-    function lightenColor(color, percent) {
-      const num = parseInt(color.replace("#", ""), 16);
-      const amt = Math.round(2.55 * percent);
-      const R = (num >> 16) + amt;
-      const G = (num >> 8 & 0x00FF) + amt;
-      const B = (num & 0x0000FF) + amt;
-      return "#" + (
-        0x1000000 +
-        (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
-        (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
-        (B < 255 ? B < 1 ? 0 : B : 255)
-      ).toString(16).slice(1);
-    }
-    
-    function darkenColor(color, percent) {
-      const num = parseInt(color.replace("#", ""), 16);
-      const amt = Math.round(2.55 * percent);
-      const R = (num >> 16) - amt;
-      const G = (num >> 8 & 0x00FF) - amt;
-      const B = (num & 0x0000FF) - amt;
-      return "#" + (
-        0x1000000 +
-        (R > 0 ? R : 0) * 0x10000 +
-        (G > 0 ? G : 0) * 0x100 +
-        (B > 0 ? B : 0)
-      ).toString(16).slice(1);
-    }
-    
-    // Обработчик переключения темы
-    function handleThemeToggle() {
-      const isDark = document.getElementById('themeToggle').checked;
-      setTheme(isDark ? 'dark' : 'standard');
-    }
-    
-    // Обработчик выбора цветовой схемы
-    function handleColorSchemeChange() {
-      const color = document.getElementById('colorScheme').value;
-      setColorScheme(color);
-    }
-    
-    // Инициализация смены
-    function initShift() {
-      const savedCurrentShift = localStorage.getItem('currentShift');
-      const savedHistory = localStorage.getItem('shiftHistory');
-      
-      if (savedCurrentShift) {
-        currentShift = JSON.parse(savedCurrentShift);
-      } else {
-        // Создание новой смены
-        currentShift = {
-          id: generateId(),
-          name: '',
-          startTime: new Date().toISOString(),
-          entries: [],
-          autoSaved: false
-        };
-        saveCurrentShift();
-      }
-      
-      if (savedHistory) {
-        shiftHistory = JSON.parse(savedHistory);
-      }
-      
-      // Обновление интерфейса
-      document.getElementById('shiftName').value = currentShift.name;
-      renderTable();
-      renderHistory();
-      updateStats();
-      
-      // Запуск автосохранения
-      startAutoSave();
-      
-      // Настройка обработчиков поиска
-      setupSearchHandlers();
-      
-      showNotification('Смена загружена', 'info');
-    }
-    
-    // Настройка обработчиков поиска
-    function setupSearchHandlers() {
-      document.getElementById('searchInput').addEventListener('input', function() {
-        currentSearchTerm = this.value.toLowerCase();
-        renderTable();
-      });
-      
-      document.getElementById('filterType').addEventListener('change', function() {
-        currentFilterType = this.value;
-        renderTable();
-      });
-      
-      document.getElementById('historySearch').addEventListener('input', function() {
-        renderHistory();
-      });
-    }
-    
-    // Очистка поиска
-    function clearSearch() {
-      document.getElementById('searchInput').value = '';
-      document.getElementById('filterType').value = '';
-      currentSearchTerm = '';
-      currentFilterType = '';
-      renderTable();
-    }
-    
-    // Очистка поиска в истории
-    function clearHistorySearch() {
-      document.getElementById('historySearch').value = '';
-      renderHistory();
-    }
-    
-    // Генерация ID
-    function generateId() {
-      return Date.now().toString(36) + Math.random().toString(36).substr(2);
-    }
-    
-    // Сохранение текущей смены
-    function saveCurrentShift() {
-      currentShift.autoSaved = true;
-      localStorage.setItem('currentShift', JSON.stringify(currentShift));
-    }
-    
-    // Сохранение истории смен
-    function saveShiftHistory() {
-      localStorage.setItem('shiftHistory', JSON.stringify(shiftHistory));
-    }
-    
-    // Завершение смены
-    function finishShift() {
-      const shiftName = document.getElementById('shiftName').value.trim() || 'Без имени';
-      
-      // Если есть заявки и смена не была автосохранена, запрашиваем подтверждение
-      if (currentShift.entries.length > 0 && !currentShift.autoSaved) {
-        if (!confirm(`В смене есть ${currentShift.entries.length} несохраненных заявок. Сохранить смену "${shiftName}"?`)) {
-          return;
-        }
-      }
-      
-      // Если смена пустая, просто создаем новую
-      if (currentShift.entries.length === 0) {
-        createNewShift();
-        showNotification('Новая смена создана', 'success');
-        return;
-      }
-      
-      // Сохранение смены в историю
-      const finishedShift = {
-        id: currentShift.id,
-        name: shiftName,
-        startTime: currentShift.startTime,
-        endTime: new Date().toISOString(),
-        entries: [...currentShift.entries]
-      };
-      
-      shiftHistory.unshift(finishedShift);
-      saveShiftHistory();
-      
-      // Создание новой смены
-      createNewShift();
-      
-      showNotification(`Смена "${shiftName}" сохранена в историю`, 'success');
-    }
-    
-    // Создание новой смены
-    function createNewShift() {
-      currentShift = {
-        id: generateId(),
-        name: '',
-        startTime: new Date().toISOString(),
-        entries: [],
-        autoSaved: false
-      };
-      
-      document.getElementById('shiftName').value = '';
-      renderTable();
-      updateStats();
-      saveCurrentShift();
-    }
-    
-    // Автосохранение
-    function startAutoSave() {
-      if (autoSaveInterval) {
-        clearInterval(autoSaveInterval);
-      }
-      
-      autoSaveInterval = setInterval(() => {
-        if (currentShift.entries.length > 0 && !currentShift.autoSaved) {
-          saveCurrentShift();
-          showNotification('Автосохранение выполнено', 'info');
-        }
-      }, 30000); // 30 секунд
-    }
-    
-    // Обновление статистики
-    function updateStats() {
-      const currentStats = document.getElementById('currentStats');
-      const historyStats = document.getElementById('historyStats');
-      
-      // Статистика текущей смены
-      const totalEntries = currentShift.entries.length;
-      const addressType = currentShift.entries.filter(e => e.type === 'А').length;
-      const streetType = currentShift.entries.filter(e => e.type === 'У').length;
-      
-      currentStats.innerHTML = `
-        <div class="stat-item">Всего заявок: [${totalEntries}]</div>
-        <div class="stat-item">Адресные: [${addressType}]</div>
-        <div class="stat-item">Уличные: [${streetType}]</div>
-      `;
-      
-      // Статистика истории
-      const totalShifts = shiftHistory.length;
-      const totalHistoricalEntries = shiftHistory.reduce((sum, shift) => sum + shift.entries.length, 0);
-      
-      historyStats.innerHTML = `
-        <div class="stat-item">Всего смен: [${totalShifts}]</div>
-        <div class="stat-item">Всего заявок: [${totalHistoricalEntries}]</div>
-      `;
-    }
-    
-    // Отображение уведомления
-    function showNotification(message, type = 'success') {
-      const notification = document.getElementById('notification');
-      notification.textContent = message;
-      notification.className = `notification ${type} show`;
-      
-      setTimeout(() => {
-        notification.classList.remove('show');
-      }, 3000);
-    }
-    
-    // Текущее время
-    function getTime() {
-      const now = new Date();
-      return now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-    }
-    
-    // Кнопка "Текущее"
-    function setNow(id) {
-      const input = document.getElementById(id);
-      input.value = getTime();
-    }
-    
-    // Валидация времени
-    function validateTime(timeStr) {
-      if (!timeStr) return true; // Пустое значение допустимо
-      
-      const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-      return timeRegex.test(timeStr);
-    }
-    
-    // Автодополнение времени
-    function setupTimeAutoComplete() {
-      const timeInputs = document.querySelectorAll('input[type="text"][id^="time"]');
-      timeInputs.forEach(input => {
-        input.addEventListener('input', function(e) {
-          let value = e.target.value.replace(/\D/g, '');
-          if (value.length >= 2) {
-            value = value.substring(0, 2) + ':' + value.substring(2, 4);
-          }
-          e.target.value = value;
-        });
-      });
-    }
-    
-    // Добавить строку
-    function addRow() {
-      // Валидация обязательных полей
-      const numValue = document.getElementById("num").value;
-      const time1 = document.getElementById("time1").value;
-      const desc = document.getElementById("desc").value;
-      const addr = document.getElementById("addr").value;
-      
-      if (!numValue || !time1 || !desc || !addr) {
-        showNotification('Заполните обязательные поля: № заявки, Получено, Описание, Адрес', 'error');
-        return;
-      }
-      
-      // Валидация номера заявки
-      const num = parseInt(numValue);
-      if (isNaN(num) || num <= 0) {
-        showNotification('Номер заявки должен быть положительным числом', 'error');
-        return;
-      }
-      
-      // Валидация времени
-      if (!validateTime(time1) || 
-          !validateTime(document.getElementById("time2").value) || 
-          !validateTime(document.getElementById("time3").value)) {
-        showNotification('Проверьте правильность введенного времени. Формат: ЧЧ:ММ', 'error');
-        return;
-      }
-      
-      const data = {
-        id: num,
-        type: document.getElementById("type").value,
-        time1: time1,
-        time2: document.getElementById("time2").value || '',
-        time3: document.getElementById("time3").value || '',
-        kusp: document.getElementById("kusp").value,
-        desc: desc,
-        addr: addr,
-        result: document.getElementById("result").value
-      };
-      
-      if (editingRow !== null) {
-        // Редактирование существующей строки
-        currentShift.entries[editingRow] = data;
-        editingRow = null;
-        document.querySelector('.add').textContent = 'Добавить';
-        showNotification('Заявка обновлена');
-      } else {
-        // Добавление новой строки
-        currentShift.entries.push(data);
-        
-        // Обновляем счетчик, если номер заявки больше текущего счетчика
-        let maxId = Math.max(...currentShift.entries.map(e => e.id), 0);
-        if (num >= maxId) {
-          maxId = num + 1;
-        }
-        
-        showNotification('Заявка добавлена');
-      }
-      
-      currentShift.autoSaved = false;
-      renderTable();
-      updateStats();
-      saveCurrentShift();
-      
-      // Сброс формы
-      let nextId = Math.max(...currentShift.entries.map(e => e.id), 0) + 1;
-      document.getElementById("num").value = nextId;
-      document.getElementById("time1").value = '';
-      setNow('time1');
-      document.getElementById("time2").value = '';
-      document.getElementById("time3").value = '';
-      document.getElementById("kusp").value = '';
-      document.getElementById("desc").value = '';
-      document.getElementById("addr").value = '';
-      document.getElementById("result").value = '';
-    }
-    
-    // Редактирование строки
-    function editRow(index) {
-      const data = currentShift.entries[index];
-      
-      document.getElementById("num").value = data.id;
-      document.getElementById("type").value = data.type;
-      document.getElementById("time1").value = data.time1;
-      document.getElementById("time2").value = data.time2;
-      document.getElementById("time3").value = data.time3;
-      document.getElementById("kusp").value = data.kusp;
-      document.getElementById("desc").value = data.desc;
-      document.getElementById("addr").value = data.addr;
-      document.getElementById("result").value = data.result;
-      
-      editingRow = index;
-      document.querySelector('.add').textContent = 'Обновить';
-      
-      // Прокрутка к форме
-      document.querySelector('.form').scrollIntoView({ behavior: 'smooth' });
-    }
-    
-    // Удаление строки
-    function deleteRow(index) {
-      if (confirm('Вы уверены, что хотите удалить эту заявку?')) {
-        currentShift.entries.splice(index, 1);
-        currentShift.autoSaved = false;
-        renderTable();
-        updateStats();
-        saveCurrentShift();
-        showNotification('Заявка удалена');
-      }
-    }
-    
-    // Отображение таблицы
-    function renderTable() {
-      const tbody = document.querySelector("#journal tbody");
-      tbody.innerHTML = '';
-      
-      // Фильтрация данных
-      let filteredEntries = currentShift.entries.filter(entry => {
-        const matchesSearch = !currentSearchTerm || 
-          Object.values(entry).some(value => 
-            value && value.toString().toLowerCase().includes(currentSearchTerm)
-          );
-        const matchesType = !currentFilterType || entry.type === currentFilterType;
-        return matchesSearch && matchesType;
-      });
-      
-      // Сортируем данные по номеру заявки
-      filteredEntries.sort((a, b) => a.id - b.id);
-      
-      filteredEntries.forEach((data, index) => {
-        const originalIndex = currentShift.entries.findIndex(e => e.id === data.id);
-        const row = tbody.insertRow();
-        
-        const cells = [
-          data.id,
-          data.type,
-          data.time1,
-          data.time2,
-          data.time3,
-          data.kusp,
-          data.desc,
-          data.addr,
-          data.result
-        ];
-        
-        cells.forEach((val, i) => {
-          const cell = row.insertCell(i);
-          cell.textContent = val || '';
-          cell.title = val || ''; // Добавляем подсказку при наведении
-          
-          // Подсветка при поиске
-          if (currentSearchTerm && val && val.toString().toLowerCase().includes(currentSearchTerm)) {
-            cell.classList.add('highlight');
-          }
-        });
-        
-        // Добавляем ячейку с действиями
-        const actionsCell = row.insertCell();
-        actionsCell.className = 'actions-cell';
-        actionsCell.innerHTML = `
-          <button class="edit-btn" onclick="editRow(${originalIndex})">Изм.</button>
-          <button class="delete-btn" onclick="deleteRow(${originalIndex})">Удл.</button>
-        `;
-      });
-    }
-    
-    // Отображение истории смен
-    function renderHistory() {
-      const historyList = document.getElementById('historyList');
-      const searchTerm = document.getElementById('historySearch').value.toLowerCase();
-      
-      historyList.innerHTML = '';
-      
-      let filteredHistory = shiftHistory.filter(shift => 
-        !searchTerm || shift.name.toLowerCase().includes(searchTerm)
-      );
-      
-      if (filteredHistory.length === 0) {
-        historyList.innerHTML = '<div style="text-align: center; padding: 20px; color: #6c757d;">История смен пуста</div>';
-        return;
-      }
-      
-      filteredHistory.forEach((shift, index) => {
-        const historyItem = document.createElement('div');
-        historyItem.className = 'history-item';
-        
-        const startDate = new Date(shift.startTime);
-        const formattedDate = startDate.toLocaleDateString('ru-RU') + ' ' + startDate.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'});
-        
-        historyItem.innerHTML = `
-          <div class="history-name">${shift.name}</div>
-          <div class="history-date">${formattedDate}</div>
-          <div class="history-count">${shift.entries.length}</div>
-          <div class="history-actions">
-            <button class="view-btn" onclick="viewShift(${index})">Просмотр</button>
-            <button class="delete-history-btn" onclick="deleteShiftFromHistory(${index})">Удалить</button>
-          </div>
-        `;
-        
-        historyList.appendChild(historyItem);
-      });
-      
-      updateStats();
-    }
-    
-    // Просмотр смены из истории
-    function viewShift(index) {
-      const shift = shiftHistory[index];
-      const tbody = document.querySelector("#viewShiftTable tbody");
-      tbody.innerHTML = '';
-      
-      document.getElementById('viewShiftTitle').textContent = `Просмотр смены: ${shift.name}`;
-      
-      // Сортируем данные по номеру заявки
-      shift.entries.sort((a, b) => a.id - b.id);
-      
-      shift.entries.forEach((data) => {
-        const row = tbody.insertRow();
-        
-        const cells = [
-          data.id,
-          data.type,
-          data.time1,
-          data.time2,
-          data.time3,
-          data.kusp,
-          data.desc,
-          data.addr,
-          data.result
-        ];
-        
-        cells.forEach((val, i) => {
-          const cell = row.insertCell(i);
-          cell.textContent = val || '';
-          cell.title = val || '';
-        });
-      });
-      
-      document.getElementById('viewShiftModal').style.display = 'block';
-    }
-    
-    // Удаление смены из истории
-    function deleteShiftFromHistory(index) {
-      if (confirm('Вы уверены, что хотите удалить эту смену из истории? Это действие нельзя отменить.')) {
-        shiftHistory.splice(index, 1);
-        saveShiftHistory();
-        renderHistory();
-        showNotification('Смена удалена из истории', 'success');
-      }
-    }
-    
-    // Скрыть модальное окно просмотра смены
-    function hideViewShiftModal() {
-      document.getElementById('viewShiftModal').style.display = 'none';
-    }
-    
-    // Показать модальное окно подтверждения очистки
-    function showClearConfirmation() {
-      if (currentShift.entries.length === 0) {
-        showNotification('Нет данных для очистки', 'warning');
-        return;
-      }
-      document.getElementById('clearModal').style.display = 'block';
-    }
-    
-    // Скрыть модальное окно подтверждения очистки
-    function hideClearConfirmation() {
-      document.getElementById('clearModal').style.display = 'none';
-    }
-    
-    // Очистить все данные
-    function clearAllData() {
-      currentShift.entries = [];
-      currentShift.autoSaved = false;
-      renderTable();
-      updateStats();
-      saveCurrentShift();
-      hideClearConfirmation();
-      showNotification('Все данные очищены', 'success');
-    }
-    
-    // Обработчики вкладок
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        // Убираем активный класс у всех вкладок
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        
-        // Добавляем активный класс к выбранной вкладке
-        tab.classList.add('active');
-        document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
-        
-        // Если переключились на вкладку истории, обновляем список
-        if (tab.dataset.tab === 'history') {
-          renderHistory();
-        }
-      });
-    });
-    
-    // Автосохранение названия смены
-    document.getElementById('shiftName').addEventListener('input', function() {
-      currentShift.name = this.value;
-      currentShift.autoSaved = false;
-      saveCurrentShift();
-    });
-    
-    // Загрузка данных из localStorage при загрузке страницы
-    document.addEventListener('DOMContentLoaded', function() {
-      loadTheme();
-      initShift();
-      setupTimeAutoComplete();
-      setNow('time1');
-      
-      let nextId = Math.max(...currentShift.entries.map(e => e.id), 0) + 1;
-      document.getElementById('num').value = nextId;
-      
-      // Добавляем обработчики событий
-      document.getElementById('themeToggle').addEventListener('change', handleThemeToggle);
-      document.getElementById('colorScheme').addEventListener('change', handleColorSchemeChange);
-    });
-  </script>
+<body class="theme-standard">
+
+    <!-- Текст информации -->
+    <div class="info-text" onclick="showInfoModal()">[info]</div>
+
+    <!-- Модальное окно информации -->
+    <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="hideInfoModal()">&times;</span>
+            <h3 class="modal-title">О приложении</h3>
+            <div class="info-content">
+                <p><strong>Бортовой журнал</strong></p>
+                <p>Версия: 1.0b</p>
+                <p>Приложение для ведения журнала заявок.</p>
+                <!--<br>
+                <p><strong>Основные функции:</strong></p>
+                <ul>
+                    <li>Добавление и редактирование заявок</li>
+                    <li>Ведение истории смен</li>
+                    <li>Поиск и фильтрация данных</li>
+                    <li>Тёмная/светлая темы</li>
+                    <li>Автосохранение данных</li>
+                    <li>Печать отчетов</li>
+                </ul>
+                <br>-->
+                <p><strong>Разработчик:</strong> Калмыков Д.А.</p>
+                <p><strong>Контакты:</strong> viperflip@yandex.ru</p>
+                <br>
+                <p><small>© 2025 Все права защищены</small></p>
+            </div>
+            <div class="modal-buttons">
+                <button class="modal-cancel" onclick="hideInfoModal()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="print-shift-name" id="printShiftName"></div>
+
+    <div class="container">
+        <div class="tabs">
+            <div class="tab active" data-tab="current">Текущая смена</div>
+            <div class="tab" data-tab="history">История смен</div>
+        </div>
+
+        <!-- Вкладка текущей смены -->
+        <div id="current-tab" class="tab-content active">
+            <div class="stats-container" id="currentStats">
+                <!-- Статистика будет добавляться здесь -->
+            </div>
+
+            <div class="search-container">
+                <input type="text" id="searchInput" class="search-input" placeholder="Поиск по таблице...">
+                <select id="filterType">
+                    <option value="">Все типы</option>
+                    <option value="А">Адрес</option>
+                    <option value="У">Улица</option>
+                </select>
+                <button onclick="clearSearch()">Сбросить</button>
+            </div>
+
+            <div class="form">
+                <div class="form-header">
+                    <span>Новая заявка</span>
+                    <div class="theme-controls">
+                        <label class="theme-label" for="themeToggle">Тёмная</label>
+                        <input type="checkbox" id="themeToggle" class="theme-checkbox">
+                        <select id="colorScheme" class="color-scheme-select">
+                            <option value="#651D1C">Красный</option>
+                            <option value="#3F4AC4">Синий</option>
+                            <option value="#3FA34D">Зелёный</option>
+                            <option value="#7FB446">Салатовый</option>
+                            <option value="#FBAF00">Оранжевый</option>
+                            <option value="#2F3269">Тёмно-синий</option>
+                            <option value="#8EA208">Оливковый</option>
+                            <option value="#F49F0A">Жёлтый</option>
+                            <option value="#76955E">Серо-зелёный</option>
+                            <option value="#AFB884">Бежевый</option>
+                            <option value="#23231F">Чёрный</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="shift-info">
+                    <input type="text" id="shiftName" class="shift-name-input" placeholder="Название смены">
+                    <button class="finish-shift" onclick="finishShift()">Завершить смену</button>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="num">№ заявки</label>
+                        <input type="number" id="num" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="type">Тип</label>
+                        <select id="type">
+                            <option value="А">Адрес</option>
+                            <option value="У">Улица</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="time1">Получено (чч:мм)</label>
+                        <div class="time-group">
+                            <input type="text" id="time1" placeholder="чч:мм" maxlength="5" />
+                            <button class="now" onclick="setNow('time1')">Сейчас</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="time2">Прибыл (чч:мм)</label>
+                        <div class="time-group">
+                            <input type="text" id="time2" placeholder="чч:мм" maxlength="5" />
+                            <button class="now" onclick="setNow('time2')">Сейчас</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="time3">Убыл (чч:мм)</label>
+                        <div class="time-group">
+                            <input type="text" id="time3" placeholder="чч:мм" maxlength="5" />
+                            <button class="now" onclick="setNow('time3')">Сейчас</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="kusp">КУСП</label>
+                        <input type="text" id="kusp" />
+                    </div>
+                    <div class="form-group">
+                        <label for="desc">Описание</label>
+                        <input type="text" id="desc" />
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="addr">Адрес</label>
+                        <input type="text" id="addr" />
+                    </div>
+                    <div class="form-group">
+                        <label for="result">Результат</label>
+                        <input type="text" id="result" />
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button class="add" onclick="addRow()">Добавить</button>
+                    <button class="print" onclick="window.print()">Печать</button>
+                    <button class="clear" onclick="showClearConfirmation()">Очистить все</button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table id="journal">
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>А/У</th>
+                            <th>Получено</th>
+                            <th>Прибыл</th>
+                            <th>Убыл</th>
+                            <th>КУСП</th>
+                            <th>Описание</th>
+                            <th>Адрес</th>
+                            <th>Результат</th>
+                            <th width="70">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Данные будут добавляться сюда -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Вкладка истории смен -->
+        <div id="history-tab" class="tab-content">
+            <div class="stats-container" id="historyStats">
+                <!-- Статистика истории будет здесь -->
+            </div>
+
+            <div class="search-container">
+                <input type="text" id="historySearch" class="search-input" placeholder="Поиск по названию смены...">
+                <button onclick="clearHistorySearch()">Сбросить</button>
+            </div>
+
+            <div class="history-list" id="historyList">
+                <!-- Список смен будет добавляться сюда -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно подтверждения очистки -->
+    <div id="clearModal" class="modal">
+        <div class="modal-content">
+            <h3>Подтверждение очистки</h3>
+            <p>Вы уверены, что хотите удалить ВСЕ данные текущей смены? Это действие нельзя отменить.</p>
+            <div class="modal-buttons">
+                <button class="modal-cancel" onclick="hideClearConfirmation()">Отмена</button>
+                <button class="modal-confirm" onclick="clearAllData()">Очистить всё</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно просмотра смены -->
+    <div id="viewShiftModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="hideViewShiftModal()">&times;</span>
+            <h3 class="modal-title" id="viewShiftTitle">Просмотр смены</h3>
+            <div class="table-container">
+                <table id="viewShiftTable">
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>А/У</th>
+                            <th>Получено</th>
+                            <th>Прибыл</th>
+                            <th>Убыл</th>
+                            <th>КУСП</th>
+                            <th>Описание</th>
+                            <th>Адрес</th>
+                            <th>Результат</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Данные смены будут добавляться сюда -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-buttons">
+                <button class="modal-cancel" onclick="hideViewShiftModal()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script src="script.js"></script>
 </body>
+
 </html>
