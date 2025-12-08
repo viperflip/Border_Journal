@@ -80,6 +80,49 @@
     --z-menu: 1250;
 }
 
+/* ===== iOS SAFE AREAS ===== */
+@supports (padding: max(0px)) {
+
+    .bottom-nav,
+    .form-actions,
+    .sheet-content {
+        padding-left: max(var(--spacing-md), env(safe-area-inset-left));
+        padding-right: max(var(--spacing-md), env(safe-area-inset-right));
+    }
+
+    .mobile-header {
+        padding-top: env(safe-area-inset-top);
+        padding-left: max(var(--spacing-md), env(safe-area-inset-left));
+        padding-right: max(var(--spacing-md), env(safe-area-inset-right));
+    }
+
+    .fab-button {
+        right: max(var(--spacing-md), env(safe-area-inset-right));
+        bottom: calc(var(--bottom-nav-height) + var(--spacing-md) + env(safe-area-inset-bottom, 0px));
+    }
+}
+
+/* Исправление для iPhone с "челкой" */
+@supports (bottom: constant(safe-area-inset-bottom)) {
+    :root {
+        --safe-area-inset-bottom: constant(safe-area-inset-bottom);
+    }
+}
+
+@supports (bottom: env(safe-area-inset-bottom)) {
+    :root {
+        --safe-area-inset-bottom: env(safe-area-inset-bottom);
+    }
+}
+
+/* Фикс для старых версий iOS */
+@supports (padding-top: 20px) {
+    .ios-fix {
+        padding-top: constant(safe-area-inset-top);
+        padding-top: env(safe-area-inset-top);
+    }
+}
+
 /* Темная тема */
 .theme-dark {
     --bg-primary: #0d1117;
@@ -1137,13 +1180,15 @@ body.sheet-open {
     bottom: 0;
     left: 0;
     right: 0;
-    height: var(--bottom-nav-height);
+    height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+    min-height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
     background: var(--bg-secondary);
     display: flex;
     border-top: 1px solid var(--border-color);
     z-index: var(--z-nav);
     box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-    padding-bottom: env(safe-area-inset-bottom);
+    /* Убираем padding-bottom, так как включили в высоту */
+    padding-bottom: 0;
 }
 
 .nav-item {
@@ -1158,14 +1203,26 @@ body.sheet-open {
     font-size: var(--font-size-xs);
     cursor: pointer;
     transition: all var(--transition-fast);
-    padding: var(--spacing-xs) 0;
+    padding: calc(var(--spacing-xs) + env(safe-area-inset-bottom, 0px) / 4) 0;
     position: relative;
+    height: var(--bottom-nav-height);
+    /* Выравнивание по вертикали */
+    align-items: center;
+    justify-content: space-around;
 }
 
 .nav-item i {
     font-size: var(--font-size-lg);
-    margin-bottom: 4px;
+    margin-bottom: 0;
+    /* Убираем фиксированный отступ */
     transition: transform var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.nav-item span {
+    flex-shrink: 0;
+    margin-top: 2px;
+    /* Небольшой отступ между иконкой и текстом */
 }
 
 .nav-item.active {
