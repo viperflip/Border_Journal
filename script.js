@@ -37,6 +37,7 @@ async function initApp() {
     renderAll();
     startAutoSave();
     initColorOptions();
+    detectIOS();
 
     // Показываем статус оффлайн/онлайн
     if (!navigator.onLine) {
@@ -1545,7 +1546,45 @@ window.addEventListener('beforeunload', () => {
         clearInterval(autoSaveInterval);
     }
 
+    // Определяем iOS и применяем фиксы
+    function detectIOS() {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        const isIPad = /Macintosh/.test(navigator.userAgent) && 'ontouchend' in document;
 
+        if (isIOS || isIPad) {
+            document.body.classList.add('ios-device');
+
+            // Динамически устанавливаем высоту bottom-nav
+            const updateBottomNavHeight = () => {
+                const bottomNav = document.querySelector('.bottom-nav');
+                if (bottomNav) {
+                    // Получаем высоту безопасной зоны
+                    const safeAreaBottom = parseInt(getComputedStyle(document.documentElement)
+                        .getPropertyValue('--safe-area-inset-bottom')) || 0;
+
+                    // Если safe-area-inset-bottom не работает, используем фиксированное значение
+                    const iosBottom = safeAreaBottom > 0 ? safeAreaBottom : 20;
+
+                    bottomNav.style.height = `calc(64px + ${iosBottom}px)`;
+                    bottomNav.style.minHeight = `calc(64px + ${iosBottom}px)`;
+
+                    // Обновляем позицию FAB кнопки
+                    const fab = document.querySelector('.fab-button');
+                    if (fab) {
+                        fab.style.bottom = `calc(64px + ${iosBottom}px + var(--spacing-md))`;
+                    }
+                }
+            };
+
+            // Вызываем при загрузке и при изменении ориентации
+            updateBottomNavHeight();
+            window.addEventListener('resize', updateBottomNavHeight);
+            window.addEventListener('orientationchange', updateBottomNavHeight);
+
+            return true;
+        }
+        return false;
+    }
 
 });
 
