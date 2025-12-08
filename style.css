@@ -67,6 +67,7 @@
     /* Высоты элементов */
     --header-height: 56px;
     --bottom-nav-height: 64px;
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
     --fab-size: 56px;
     --touch-target: 44px;
 
@@ -1777,38 +1778,4 @@ body.sheet-open .bottom-nav {
 .fab-button,
 .bottom-nav {
     transition: transform 0.3s ease;
-}
-
-/* iOS FIX - простое решение */
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
-    .bottom-nav {
-        padding-bottom: env(safe-area-inset-bottom);
-    }
-
-    .nav-item {
-        padding-bottom: env(safe-area-inset-bottom);
-    }
-}
-
-/* Фикс для iPhone */
-@media (max-width: 767px) and (orientation: portrait) {
-    .bottom-nav {
-        height: 74px !important;
-        min-height: 74px !important;
-    }
-
-    .nav-item {
-        height: 64px;
-        padding-top: 10px;
-        padding-bottom: 10px;
-    }
-
-    .nav-item i {
-        margin-bottom: 2px;
-    }
-
-    .nav-item span {
-        font-size: 11px;
-        line-height: 1.2;
-    }
 }
