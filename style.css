@@ -1836,12 +1836,3 @@ body.sheet-open .bottom-nav {
 .bottom-nav {
     transition: transform 0.3s ease;
 }
-
-/* Для отладки */
-.bottom-nav {
-    border: 2px solid red !important;
-}
-
-.nav-item {
-    border: 1px solid blue !important;
-}
