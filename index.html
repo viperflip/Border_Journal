@@ -1,365 +1,51 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-    <!-- iOS Safe Area -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Журнал заявок</title>
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="./manifest.json">
-
-    <!-- Иконка для iOS -->
-    <link rel="apple-touch-icon" href="./icon-192.png">
-
-    <!-- Цвет темы для браузеров -->
-    <meta name="theme-color" content="#651D1C">
-
-    <!-- Viewport для PWA -->
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-
-    <!-- PWA capability -->
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Учет смены</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#020617">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
 </head>
+<body>
+<div id="app">
 
-<body class="theme-light">
-
-    <!-- Верхний бар -->
-    <header class="mobile-header">
-        <div class="header-left">
-            <button class="menu-toggle" id="menuToggle">
-                <i class="fas fa-bars"></i>
-            </button>
-            <h1 class="app-title">Журнал заявок</h1>
-        </div>
-        <div class="header-right">
-            <div class="stats-preview">
-                <span class="stat-badge total" id="totalBadge">0</span>
-                <span class="stat-badge address" id="addressBadge">0</span>
-                <span class="stat-badge street" id="streetBadge">0</span>
-            </div>
-            <button class="theme-toggle" id="mobileThemeToggle">
-                <i class="fas fa-moon"></i>
-            </button>
-        </div>
+  <main id="screen-shift" class="screen active">
+    <header class="header">
+      <h1>Смена</h1>
+      <button id="addRequestBtn" class="primary">+ Заявка</button>
     </header>
+    <div id="requestsList" class="cards"></div>
+  </main>
 
-    <!-- Поиск -->
-    <div class="search-overlay" id="searchOverlay">
-        <div class="search-header">
-            <div class="search-input-container">
-                <i class="fas fa-search"></i>
-                <input type="text" id="mobileSearch" class="mobile-search-input" placeholder="Поиск по всем полям...">
-                <button class="clear-search" onclick="clearMobileSearch()">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <button class="close-search" onclick="hideSearch()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="search-filters">
-            <button class="filter-chip active" data-filter="">Все</button>
-            <button class="filter-chip" data-filter="А">Адрес</button>
-            <button class="filter-chip" data-filter="У">Улица</button>
-        </div>
+  <main id="screen-delivered" class="screen">
+    <header class="header">
+      <h1>Доставленные</h1>
+      <button id="addDeliveredBtn" class="primary">+ Добавить</button>
+    </header>
+    <div id="deliveredList" class="cards"></div>
+  </main>
+
+  <nav class="bottom-nav">
+    <button data-screen="shift" class="nav-btn active">Смена</button>
+    <button data-screen="delivered" class="nav-btn">Доставленные</button>
+  </nav>
+
+</div>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-content">
+    <h2 id="modalTitle"></h2>
+    <form id="modalForm"></form>
+    <div class="modal-actions">
+      <button id="cancelModal">Отмена</button>
+      <button type="submit" form="modalForm" class="primary">Сохранить</button>
     </div>
+  </div>
+</div>
 
-    <!-- Основной контейнер -->
-    <main class="mobile-container">
-        <!-- Вкладка текущей смены -->
-        <div id="current-tab" class="tab-content active">
-            <!-- Блок с названием смены -->
-            <div class="shift-header">
-                <div class="shift-name-container">
-                    <input type="text" id="mobileShiftName" class="mobile-shift-name" placeholder="Название смены"
-                        maxlength="50">
-                    <span class="shift-status" id="shiftStatus">
-                        <i class="fas fa-circle"></i> Автосохранение
-                    </span>
-                </div>
-                <button class="finish-shift-btn" onclick="finishShift()">
-                    <i class="fas fa-flag-checkered"></i>
-                    <span>Завершить</span>
-                </button>
-            </div>
-
-            <!-- Контейнер для карточек -->
-            <div class="cards-container" id="cardsContainer">
-                <!-- Карточки будут добавляться здесь -->
-            </div>
-
-            <!-- Сообщение если нет заявок -->
-            <div class="empty-state" id="emptyState">
-                <i class="fas fa-clipboard-list"></i>
-                <h3>Нет заявок</h3>
-                <p>Добавьте первую заявку, нажав на кнопку ниже</p>
-            </div>
-        </div>
-
-        <!-- Вкладка доставленных -->
-        <div id="delivered-tab" class="tab-content">
-            <div class="delivered-header">
-                <h2>Доставленные</h2>
-                <button class="add-delivered-btn" onclick="openDeliveredForm()">
-                    <i class="fas fa-user-plus"></i>
-                    <span>Добавить</span>
-                </button>
-            </div>
-
-            <div class="delivered-stats">
-                <div class="delivered-stat">
-                    <span class="stat-label">Всего доставленных:</span>
-                    <span class="stat-value" id="totalDelivered">0</span>
-                </div>
-                <div class="delivered-stat">
-                    <span class="stat-label">В текущей смене:</span>
-                    <span class="stat-value" id="currentShiftDelivered">0</span>
-                </div>
-            </div>
-
-            <div class="delivered-search">
-                <i class="fas fa-search"></i>
-                <input type="text" id="deliveredSearch" placeholder="Поиск по ФИО..." oninput="filterDelivered()">
-            </div>
-
-            <div class="delivered-list" id="deliveredList">
-                <!-- Список доставленных будет здесь -->
-            </div>
-
-            <div class="empty-delivered" id="emptyDelivered">
-                <i class="fas fa-user-check"></i>
-                <h3>Нет доставленных</h3>
-                <p>Добавьте первого доставленного</p>
-            </div>
-        </div>
-
-        <!-- Вкладка истории смен -->
-        <div id="history-tab" class="tab-content">
-            <div class="history-header">
-                <h2>История смен</h2>
-            </div>
-
-            <div class="history-search">
-                <i class="fas fa-search"></i>
-                <input type="text" id="mobileHistorySearch" placeholder="Поиск смен..." oninput="filterHistory()">
-            </div>
-
-            <div class="history-stats">
-                <div class="history-stat">
-                    <span class="stat-label">Всего смен:</span>
-                    <span class="stat-value" id="totalShifts">0</span>
-                </div>
-                <div class="history-stat">
-                    <span class="stat-label">Всего заявок:</span>
-                    <span class="stat-value" id="totalHistoryEntries">0</span>
-                </div>
-            </div>
-
-            <div class="history-list" id="mobileHistoryList">
-                <!-- История будет добавляться здесь -->
-            </div>
-
-            <div class="empty-history" id="emptyHistory">
-                <i class="fas fa-history"></i>
-                <h3>История пуста</h3>
-                <p>Завершите текущую смену, чтобы она появилась здесь</p>
-            </div>
-        </div>
-    </main>
-
-    <!-- FAB кнопка -->
-    <button class="fab-button" id="fabButton">
-        <i class="fas fa-plus"></i>
-    </button>
-
-    <!-- Bottom Navigation -->
-    <nav class="bottom-nav">
-        <button class="nav-item active" data-tab="current">
-            <i class="fas fa-home"></i>
-            <span>Смена</span>
-        </button>
-
-        <button class="nav-item" data-tab="delivered">
-            <i class="fas fa-user-check"></i>
-            <span>Доставленные</span>
-        </button>
-
-        <button class="nav-item" data-tab="history">
-            <i class="fas fa-history"></i>
-            <span>История</span>
-        </button>
-    </nav>
-
-    <!-- Bottom Sheet форма -->
-    <div class="bottom-sheet" id="bottomSheet">
-        <div class="sheet-header">
-            <div class="sheet-handle"></div>
-            <h3 id="sheetTitle">Новая заявка</h3>
-            <button class="close-sheet" id="closeSheet">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-
-        <div class="sheet-content">
-            <form id="mobileForm" onsubmit="handleFormSubmit(event)">
-                <!-- Номер и тип в одной строке -->
-                <div class="form-row">
-                    <div class="form-group half">
-                        <label for="mobileNum">№ заявки</label>
-                        <input type="number" id="mobileNum" min="1" required />
-                    </div>
-                    <div class="form-group half">
-                        <label for="mobileType">Тип</label>
-                        <select id="mobileType">
-                            <option value="А">Адрес</option>
-                            <option value="У">Улица</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Временные поля в одной строке -->
-                <div class="form-row">
-                    <div class="form-group third">
-                        <label for="mobileTime1">Получено</label>
-                        <div class="time-input">
-                            <input type="text" id="mobileTime1" placeholder="чч:мм" maxlength="5" required />
-                            <button type="button" class="time-now" onclick="setMobileNow('mobileTime1')">
-                                <i class="fas fa-clock"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="form-group third">
-                        <label for="mobileTime2">Прибыл</label>
-                        <div class="time-input">
-                            <input type="text" id="mobileTime2" placeholder="чч:мм" maxlength="5" />
-                            <button type="button" class="time-now" onclick="setMobileNow('mobileTime2')">
-                                <i class="fas fa-clock"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="form-group third">
-                        <label for="mobileTime3">Убыл</label>
-                        <div class="time-input">
-                            <input type="text" id="mobileTime3" placeholder="чч:мм" maxlength="5" />
-                            <button type="button" class="time-now" onclick="setMobileNow('mobileTime3')">
-                                <i class="fas fa-clock"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- КУСП и Результат -->
-                <div class="form-row">
-                    <div class="form-group half">
-                        <label for="mobileKusp">КУСП</label>
-                        <input type="text" id="mobileKusp" />
-                    </div>
-                    <div class="form-group half">
-                        <label for="mobileResult">Результат</label>
-                        <input type="text" id="mobileResult" />
-                    </div>
-                </div>
-
-                <!-- Описание -->
-                <div class="form-row">
-                    <div class="form-group full">
-                        <label for="mobileDesc">Описание</label>
-                        <textarea id="mobileDesc" rows="3" placeholder="Описание заявки..." required></textarea>
-                    </div>
-                </div>
-
-                <!-- Адрес -->
-                <div class="form-row">
-                    <div class="form-group full">
-                        <label for="mobileAddr">Адрес</label>
-                        <input type="text" id="mobileAddr" required />
-                    </div>
-                </div>
-
-                <!-- Кнопки формы -->
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary" id="cancelEditBtn" onclick="cancelMobileEdit()"
-                        style="display: none;">
-                        Отмена
-                    </button>
-                    <button type="submit" class="btn-primary" id="submitBtn">
-                        Добавить заявку
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Оверлей для bottom sheet -->
-    <div class="sheet-overlay" id="sheetOverlay"></div>
-
-    <!-- Меню настроек -->
-    <div class="settings-menu" id="settingsMenu">
-        <div class="menu-header">
-            <h3>Настройки</h3>
-            <button class="close-menu" onclick="closeSettings()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="menu-content">
-            <div class="menu-section">
-                <h4>Цветовая схема</h4>
-                <div class="color-options" id="colorOptions">
-                    <!-- Цвета будут добавляться динамически -->
-                </div>
-            </div>
-
-            <div class="menu-section">
-                <h4>Очистка данных</h4>
-                <button class="btn-danger" onclick="showClearConfirmation()">
-                    <i class="fas fa-trash"></i>
-                    Очистить текущую смену
-                </button>
-            </div>
-
-            <div class="menu-section">
-                <h4>Экспорт</h4>
-                <button class="btn-secondary" onclick="exportCurrentShift()">
-                    <i class="fas fa-file-export"></i>
-                    Экспорт в JSON
-                </button>
-                <button class="btn-secondary" onclick="printShift()">
-                    <i class="fas fa-print"></i>
-                    Печать смены
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Уведомления -->
-    <div class="mobile-notification" id="mobileNotification">
-        <div class="notification-content">
-            <i class="fas fa-check-circle"></i>
-            <span id="notificationText">Заявка добавлена</span>
-        </div>
-    </div>
-
-    <!-- Модальное окно подтверждения очистки -->
-    <div id="clearModal" class="modal">
-        <div class="modal-content">
-            <h3>Подтверждение очистки</h3>
-            <p>Вы уверены, что хотите удалить ВСЕ данные текущей смены? Это действие нельзя отменить.</p>
-            <div class="modal-buttons">
-                <button class="modal-cancel" onclick="hideClearConfirmation()">Отмена</button>
-                <button class="modal-confirm" onclick="clearAllData()">Очистить всё</button>
-            </div>
-        </div>
-    </div>
-
-    <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
-
 </html>
