@@ -10,7 +10,7 @@ const PRECACHE_URLS = [
     './style.css',
     './script.js',
     './manifest.json',
-    './icon-192.png',
+    './icon-180.png',
     './icon-512.png',
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
 ];
@@ -188,8 +188,8 @@ self.addEventListener('push', event => {
 
     const options = {
         body: data.body || 'Новое уведомление из журнала',
-        icon: './icon-192.png',
-        badge: './icon-192.png',
+        icon: './icon-180.png',
+        badge: './icon-180.png',
         vibrate: [100, 50, 100],
         data: {
             url: data.url || './',
@@ -235,4 +235,5 @@ self.addEventListener('notificationclick', event => {
                 })
         );
     }
+
 });
