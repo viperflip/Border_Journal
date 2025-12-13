@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>ShiftManager</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#020617">
@@ -24,6 +24,9 @@
       <h2 class="screen-title">Смена</h2>
       <button id="addRequestBtn" class="primary" type="button">+ Заявка</button>
     </header>
+    <div class="toolbar">
+      <input id="requestSearch" class="search" type="search" placeholder="Поиск: №, адрес, КУСП…" autocomplete="off">
+    </div>
     <div id="requestsList" class="cards" role="list"></div>
   </main>
 
@@ -32,6 +35,9 @@
       <h2 class="screen-title">Доставленные</h2>
       <button id="addDeliveredBtn" class="primary" type="button">+ Добавить</button>
     </header>
+    <div class="toolbar">
+      <input id="deliveredSearch" class="search" type="search" placeholder="Поиск: ФИО, основание…" autocomplete="off">
+    </div>
     <div id="deliveredList" class="cards" role="list"></div>
   </main>
 

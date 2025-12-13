@@ -54,9 +54,25 @@ body{
   background:var(--bg);
   color:var(--text);
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 #app{padding-top:72px;padding-bottom:96px}
+
+.toolbar{padding:0 16px 10px}
+.search{
+  width:100%;
+  padding:10px 12px;
+  border-radius:14px;
+  border:1px solid var(--border);
+  background:rgba(2,6,23,.35);
+  color:var(--text);
+  outline:none;
+}
+:root[data-theme="light"] .search,
+:root[data-theme="system"] .search{
+  background:rgba(226,232,240,.65);
+}
 
 .header{
   padding:16px;
@@ -102,6 +118,34 @@ h1{font-size:18px;margin:0}
 
 .card-title{font-weight:600;margin-bottom:6px}
 .card-meta{font-size:13px;color:var(--muted)}
+
+.card-details{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.kv{display:flex;gap:10px;align-items:flex-start}
+.k{min-width:84px;color:var(--muted);font-size:12px;line-height:1.2}
+.v{flex:1;font-size:13px;line-height:1.25;word-break:break-word}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{
+  font-size:11px;
+  padding:6px 8px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:rgba(148,163,184,.08);
+}
+
+.quick-actions{display:flex;gap:8px;margin-top:10px}
+.quick-actions button{
+  flex:1;
+  border:none;
+  padding:8px;
+  border-radius:12px;
+  background:rgba(51,65,85,.65);
+  color:var(--text);
+  font-weight:650;
+  font-size:12px;
+  transition:transform .08s ease, opacity .08s ease;
+}
+.quick-actions button:active{transform:scale(.97);opacity:.85}
 
 .card-actions{
   display:flex;
@@ -174,6 +218,7 @@ h1{font-size:18px;margin:0}
   display:flex;
   align-items:center;
   justify-content:center;
+  z-index:100;
 }
 .modal.hidden{display:none}
 
@@ -181,12 +226,28 @@ h1{font-size:18px;margin:0}
   background:var(--surface);
   border-radius:18px;
   width:92%;
-  max-height:90%;
+  max-height:min(92vh, 720px);
   overflow:auto;
   padding:16px;
+  padding-bottom:calc(16px + env(safe-area-inset-bottom));
   animation:modalUp .2s ease;
   border:1px solid var(--border);
 }
+
+.modal-open .bottom-nav{display:none}
+
+.input-row{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.input-row input,.input-row select,.input-row textarea{margin-bottom:0}
+.now-btn{
+  border:none;
+  padding:10px 12px;
+  border-radius:12px;
+  background:rgba(34,197,94,.14);
+  color:var(--text);
+  font-weight:700;
+  white-space:nowrap;
+}
+.now-btn:active{transform:scale(.98);opacity:.9}
 
 @keyframes modalUp{
   from{transform:translateY(20px);opacity:0}

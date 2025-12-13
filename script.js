@@ -4,16 +4,26 @@
   const $ = (s, root=document) => root.querySelector(s);
   const $$ = (s, root=document) => Array.from(root.querySelectorAll(s));
 
-  const APP_VERSION = '1.1.0';
+  const APP_VERSION = '1.2.0';
   const DATA_VERSION = 1;
   const DATA_KEY = 'shiftData';
   const SETTINGS_KEY = 'shiftSettings';
 
   const defaultData = () => ({ v: DATA_VERSION, requests: [], delivered: [] });
-  const defaultSettings = () => ({ theme: 'system', haptics: true });
+  const defaultSettings = () => ({
+    theme: 'system',
+    haptics: true,
+    templates: {
+      result: [],
+      reason: []
+    }
+  });
 
   let data = loadData();
   let settings = loadSettings();
+
+  let requestQuery = '';
+  let deliveredQuery = '';
 
   // ---------- Settings ----------
   function loadSettings(){
@@ -27,6 +37,16 @@
 
   function saveSettings(){
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }
+
+  function pushTemplate(kind, value){
+    const v = (value ?? '').toString().trim();
+    if(!v) return;
+    const list = settings.templates?.[kind] || [];
+    const next = [v, ...list.filter(x => x !== v)].slice(0, 12);
+    settings.templates = settings.templates || { result: [], reason: [] };
+    settings.templates[kind] = next;
+    saveSettings();
   }
 
   function applyTheme(){
@@ -103,7 +123,15 @@
   function renderRequests(){
     const root = $('#requestsList');
     root.innerHTML = '';
-    data.requests.forEach((r, i) => {
+    const q = requestQuery.trim().toLowerCase();
+    const items = q
+      ? data.requests.map((r,i) => ({r,i})).filter(({r}) => {
+          const hay = `${r.num||''} ${r.addr||''} ${r.kusp||''} ${r.type||''} ${r.desc||''} ${r.result||''}`.toLowerCase();
+          return hay.includes(q);
+        })
+      : data.requests.map((r,i) => ({r,i}));
+
+    items.forEach(({r, i}) => {
       const title = `Заявка №${(r.num || '').trim()}`.trim();
 
       const chips = [];
@@ -132,6 +160,11 @@
         chips.length
           ? el('div', { class:'chips' }, chips.map(t => el('span', { class:'chip', text:t })))
           : null,
+        el('div', { class:'quick-actions' }, [
+          el('button', { type:'button', dataset:{ action:'stamp', stamp:'t1', index:String(i) }, text:'Выехал' }),
+          el('button', { type:'button', dataset:{ action:'stamp', stamp:'t2', index:String(i) }, text:'Прибыл' }),
+          el('button', { type:'button', dataset:{ action:'finish', index:String(i) }, text:'Завершил' }),
+        ]),
         el('div', { class:'card-actions' }, [
           el('button', { class:'edit', type:'button', dataset:{ scope:'request', action:'edit', index:String(i) }, text:'Изменить' }),
           el('button', { class:'delete', type:'button', dataset:{ scope:'request', action:'delete', index:String(i) }, text:'Удалить' })
@@ -145,7 +178,15 @@
   function renderDelivered(){
     const root = $('#deliveredList');
     root.innerHTML = '';
-    data.delivered.forEach((d, i) => {
+    const q = deliveredQuery.trim().toLowerCase();
+    const items = q
+      ? data.delivered.map((d,i) => ({d,i})).filter(({d}) => {
+          const hay = `${d.name||''} ${d.reason||''} ${d.time||''}`.toLowerCase();
+          return hay.includes(q);
+        })
+      : data.delivered.map((d,i) => ({d,i}));
+
+    items.forEach(({d,i}) => {
       const title = (d.name || '').trim() || 'Доставление';
       const details = [
         ['Время', d.time],
@@ -175,11 +216,38 @@
   function handleListClick(e){
     const btn = e.target.closest('button[data-action]');
     if(!btn) return;
-    // Cards use data-scope; keep backward compatibility with older builds that used data-kind.
-    const kind = btn.dataset.scope || btn.dataset.kind;
     const action = btn.dataset.action;
     const index = Number(btn.dataset.index);
     if(Number.isNaN(index)) return;
+
+    // Fast actions for requests
+    if(action === 'stamp'){
+      haptic();
+      const field = btn.dataset.stamp;
+      const r = data.requests[index];
+      if(!r) return;
+      r[field] = r[field] || nowHHMM();
+      saveData(); render();
+      return;
+    }
+
+    if(action === 'finish'){
+      haptic();
+      const r = data.requests[index];
+      if(!r) return;
+      r.t3 = r.t3 || nowHHMM();
+      if(!(r.result || '').trim()){
+        const sug = (settings.templates?.result?.[0] || '').toString();
+        const res = prompt('Результат (можно оставить пустым):', sug);
+        if(res !== null) r.result = (res || '').trim();
+      }
+      pushTemplate('result', r.result);
+      saveData(); render();
+      return;
+    }
+
+    // Cards use data-scope; keep backward compatibility with older builds that used data-kind.
+    const kind = btn.dataset.scope || btn.dataset.kind;
 
     if(action === 'delete'){
       haptic();
@@ -223,12 +291,26 @@
         input = el('textarea', common);
         input.value = value;
       }else{
-        input = el('input', { ...common, type: f.type || 'text', inputmode: f.inputmode || undefined, placeholder: f.placeholder || undefined });
+        input = el('input', { ...common, type: f.type || 'text', inputmode: f.inputmode || undefined, placeholder: f.placeholder || undefined, list: f.datalistId || undefined });
         input.value = value;
         if(f.pattern) input.setAttribute('pattern', f.pattern);
       }
 
-      form.appendChild(input);
+      // Add optional "Now" button for time fields
+      if(f.now){
+        const row = el('div', { class:'input-row' }, [
+          input,
+          el('button', { class:'now-btn', type:'button', text:'Сейчас', onClick: () => { input.value = nowTime(); } })
+        ]);
+        form.appendChild(row);
+      }else{
+        form.appendChild(input);
+      }
+
+      // Add optional datalist element for suggestions
+      if(f.datalistId && Array.isArray(f.datalistOptions)){
+        form.appendChild(el('datalist', { id: f.datalistId }, f.datalistOptions.map(x => el('option', { value: x }))));
+      }
     });
 
     form.onsubmit = (e) => {
@@ -246,6 +328,7 @@
       closeModal();
     };
 
+    document.body.classList.add('modal-open');
     $('#modal').classList.remove('hidden');
   }
 
@@ -253,6 +336,7 @@
     $('#modal').classList.add('hidden');
     $('#modalForm').onsubmit = null;
     editContext = null;
+    document.body.classList.remove('modal-open');
   }
 
   $('#cancelModal').addEventListener('click', closeModal);
@@ -278,13 +362,13 @@
     const fields = [
       { label:'Номер заявки', name:'num', required:true, type:'text', inputmode:'numeric', pattern:'[0-9]+' },
       { label:'Тип', name:'type', type:'select', options:['Адрес','Улица'] },
-      { label:'Время получения', name:'t1', type:'time' },
-      { label:'Время прибытия', name:'t2', type:'time' },
-      { label:'Время убытия', name:'t3', type:'time' },
+      { label:'Время получения', name:'t1', type:'time', now:true },
+      { label:'Время прибытия', name:'t2', type:'time', now:true },
+      { label:'Время убытия', name:'t3', type:'time', now:true },
       { label:'КУСП', name:'kusp', type:'text', inputmode:'numeric' },
       { label:'Адрес', name:'addr', type:'text' },
       { label:'Описание', name:'desc', type:'textarea' },
-      { label:'Результат', name:'result', type:'text' }
+      { label:'Результат', name:'result', type:'text', datalistId:'dlResult', datalistOptions: settings.templates?.result || [] }
     ];
 
     openModal({
@@ -294,6 +378,7 @@
       onSubmit: (o) => {
         // Normalize
         o.num = (o.num || '').trim();
+        if((o.result || '').trim()) pushTemplate('result', o.result);
         if(editContext !== null) data.requests[editContext] = o;
         else data.requests.push(o);
         saveData(); render();
@@ -307,8 +392,8 @@
     const initial = isEdit ? (data.delivered[index] || {}) : {};
     const fields = [
       { label:'ФИО', name:'name', required:true, type:'text' },
-      { label:'Время доставления', name:'time', type:'time' },
-      { label:'Основание', name:'reason', type:'text' }
+      { label:'Время доставления', name:'time', type:'time', now:true },
+      { label:'Основание', name:'reason', type:'text', datalistId:'dlReason', datalistOptions: settings.templates?.reason || [] }
     ];
 
     openModal({
@@ -317,12 +402,44 @@
       initialValues: initial,
       onSubmit: (o) => {
         o.name = (o.name || '').trim();
+        if((o.reason || '').trim()) pushTemplate('reason', o.reason);
         if(editContext !== null) data.delivered[editContext] = o;
         else data.delivered.push(o);
         saveData(); render();
       }
     });
   }
+
+  // ---------- Search ----------
+  function initSearch(){
+    const rq = $('#requestSearch');
+    const dq = $('#deliveredSearch');
+    rq.addEventListener('input', () => {
+      requestQuery = rq.value;
+      renderRequests();
+    });
+    dq.addEventListener('input', () => {
+      deliveredQuery = dq.value;
+      renderDelivered();
+    });
+  }
+
+  // ---------- Utils ----------
+  function nowTime(){
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    return `${hh}:${mm}`;
+  }
+
+  function nowHHMM(){
+    return nowTime();
+  }
+
+  // Prevent pinch zoom on iOS Safari (meta viewport alone isn't always enough)
+  document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive:false });
+  document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive:false });
+  document.addEventListener('gestureend', (e) => e.preventDefault(), { passive:false });
 
   $('#addRequestBtn').addEventListener('click', () => openRequestModal(null));
   $('#addDeliveredBtn').addEventListener('click', () => openDeliveredModal(null));
@@ -452,6 +569,7 @@
   // ---------- Init ----------
   applyTheme();
   initSettingsUI();
+  initSearch();
   initServiceWorker();
   render();
 })();
