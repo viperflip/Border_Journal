@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Учет смены</title>
+  <title>ShiftManager</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#020617">
   <link rel="apple-touch-icon" href="icon-180.png">
@@ -11,36 +11,116 @@
 </head>
 <body>
 <div id="app">
+  <header class="topbar" role="banner">
+    <div class="brand">
+      <div class="brand-title">ShiftManager</div>
+      <div class="brand-subtitle">Система учета заявок</div>
+    </div>
+  </header>
 
-  <main id="screen-shift" class="screen active">
+
+  <main id="screen-shift" class="screen active" aria-label="Смена">
     <header class="header">
-      <h1>Смена</h1>
-      <button id="addRequestBtn" class="primary">+ Заявка</button>
+      <h2 class="screen-title">Смена</h2>
+      <button id="addRequestBtn" class="primary" type="button">+ Заявка</button>
     </header>
-    <div id="requestsList" class="cards"></div>
+    <div id="requestsList" class="cards" role="list"></div>
   </main>
 
-  <main id="screen-delivered" class="screen">
+  <main id="screen-delivered" class="screen" aria-label="Доставленные">
     <header class="header">
-      <h1>Доставленные</h1>
-      <button id="addDeliveredBtn" class="primary">+ Добавить</button>
+      <h2 class="screen-title">Доставленные</h2>
+      <button id="addDeliveredBtn" class="primary" type="button">+ Добавить</button>
     </header>
-    <div id="deliveredList" class="cards"></div>
+    <div id="deliveredList" class="cards" role="list"></div>
   </main>
 
-  <nav class="bottom-nav">
-    <button data-screen="shift" class="nav-btn active">Смена</button>
-    <button data-screen="delivered" class="nav-btn">Доставленные</button>
+  <main id="screen-settings" class="screen" aria-label="Настройки">
+    <header class="header">
+      <h2 class="screen-title">Настройки</h2>
+      <span class="muted" id="appVersion"></span>
+    </header>
+
+    <section class="cards">
+      <div class="card">
+        <div class="row">
+          <div>
+            <div class="card-title">Тема</div>
+            <div class="card-meta">Светлая / тёмная / как в системе</div>
+          </div>
+          <select id="themeSelect" class="compact">
+            <option value="system">Системная</option>
+            <option value="dark">Тёмная</option>
+            <option value="light">Светлая</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div>
+            <div class="card-title">Вибро-отклик</div>
+            <div class="card-meta">Короткая вибрация при действиях</div>
+          </div>
+          <label class="switch">
+            <input id="hapticsToggle" type="checkbox">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Данные</div>
+        <div class="card-meta">Экспорт/импорт и очистка</div>
+        <div class="card-actions">
+          <button id="exportBtn" class="edit" type="button">Экспорт</button>
+          <button id="importBtn" class="edit" type="button">Импорт</button>
+        </div>
+        <div class="card-actions">
+          <button id="clearBtn" class="delete" type="button">Очистить всё</button>
+        </div>
+        <input id="importFile" type="file" accept="application/json" class="hidden">
+      </div>
+
+      <div class="card">
+        <div class="card-title">PWA</div>
+        <div class="card-meta" id="pwaStatus">Офлайн-кэш: …</div>
+        <div class="card-actions">
+          <button id="updateCacheBtn" class="edit" type="button">Обновить кэш</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Навигация">
+    <button data-screen="shift" class="nav-btn active" type="button" aria-label="Смена">
+      <span class="nav-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M9 2h6l1 3h4v17H4V5h4l1-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 9h6M9 13h6M9 17h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </span>
+      <span class="nav-label">Смена</span>
+    </button>
+    <button data-screen="delivered" class="nav-btn" type="button" aria-label="Доставленные">
+      <span class="nav-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M20 7 10 17l-4-4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4h16" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+      </span>
+      <span class="nav-label">Доставл.</span>
+    </button>
+    <button data-screen="settings" class="nav-btn" type="button" aria-label="Настройки">
+      <span class="nav-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a7.9 7.9 0 0 0 .1-2l2-1.2-2-3.4-2.3.6a8 8 0 0 0-1.7-1L13.9 5H10l-.6 2.9c-.6.3-1.2.6-1.7 1L5.4 8.3l-2 3.4 2 1.2a7.9 7.9 0 0 0 .1 2l-2 1.2 2 3.4 2.3-.6c.5.4 1.1.7 1.7 1L10.1 21H14l.6-2.9c.6-.3 1.2-.6 1.7-1l2.3.6 2-3.4-2-1.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="nav-label">Настр.</span>
+    </button>
   </nav>
 
 </div>
 
-<div id="modal" class="modal hidden">
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
   <div class="modal-content">
     <h2 id="modalTitle"></h2>
     <form id="modalForm"></form>
     <div class="modal-actions">
-      <button id="cancelModal">Отмена</button>
+      <button id="cancelModal" type="button">Отмена</button>
       <button type="submit" form="modalForm" class="primary">Сохранить</button>
     </div>
   </div>
