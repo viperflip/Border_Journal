@@ -1,575 +1,879 @@
 (() => {
   'use strict';
 
-  const $ = (s, root=document) => root.querySelector(s);
-  const $$ = (s, root=document) => Array.from(root.querySelectorAll(s));
+  // ---------- Constants ----------
+  const APP_VERSION = '3.0.0-stage3';
+  const DATA_KEY = 'shift_manager_data_v2';
+  const SETTINGS_KEY = 'shift_manager_settings_v2';
 
-  const APP_VERSION = '1.2.0';
-  const DATA_VERSION = 1;
-  const DATA_KEY = 'shiftData';
-  const SETTINGS_KEY = 'shiftSettings';
+  // ---------- Helpers ----------
+  const $ = (sel) => document.querySelector(sel);
 
-  const defaultData = () => ({ v: DATA_VERSION, requests: [], delivered: [] });
-  const defaultSettings = () => ({
-    theme: 'system',
-    haptics: true,
-    templates: {
-      result: [],
-      reason: []
-    }
-  });
-
-  let data = loadData();
-  let settings = loadSettings();
-
-  let requestQuery = '';
-  let deliveredQuery = '';
-
-  // ---------- Settings ----------
-  function loadSettings(){
-    try{
-      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
-      return { ...defaultSettings(), ...(s || {}) };
-    }catch{
-      return defaultSettings();
-    }
-  }
-
-  function saveSettings(){
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  }
-
-  function pushTemplate(kind, value){
-    const v = (value ?? '').toString().trim();
-    if(!v) return;
-    const list = settings.templates?.[kind] || [];
-    const next = [v, ...list.filter(x => x !== v)].slice(0, 12);
-    settings.templates = settings.templates || { result: [], reason: [] };
-    settings.templates[kind] = next;
-    saveSettings();
-  }
-
-  function applyTheme(){
-    const root = document.documentElement;
-    root.setAttribute('data-theme', settings.theme);
-  }
-
-  function haptic(){
-    if(!settings.haptics) return;
-    if(navigator.vibrate) navigator.vibrate(10);
-  }
-
-  // ---------- Data ----------
-  function loadData(){
-    try{
-      const raw = JSON.parse(localStorage.getItem(DATA_KEY));
-      if(!raw) return defaultData();
-      // migration point
-      if(typeof raw.v !== 'number'){
-        // older format: {requests, delivered}
-        return { v: DATA_VERSION, requests: raw.requests || [], delivered: raw.delivered || [] };
-      }
-      return { ...defaultData(), ...raw };
-    }catch{
-      return defaultData();
-    }
-  }
-
-  function saveData(){
-    localStorage.setItem(DATA_KEY, JSON.stringify(data));
-  }
-
-  // ---------- Navigation ----------
-  function switchScreen(name){
-    haptic();
-    $$('.screen').forEach(s => s.classList.remove('active'));
-    $$('.nav-btn').forEach(b => b.classList.remove('active'));
-    const screen = $('#screen-' + name);
-    const btn = document.querySelector(`[data-screen="${name}"]`);
-    if(screen) screen.classList.add('active');
-    if(btn) btn.classList.add('active');
-  }
-
-  $$('.nav-btn').forEach(b => b.addEventListener('click', () => switchScreen(b.dataset.screen)));
-
-  // ---------- Safe DOM helpers ----------
-  function el(tag, props = {}, children = []){
+  function el(tag, props = {}, children = []) {
     const node = document.createElement(tag);
-    for(const [k,v] of Object.entries(props)){
-      if(k === 'class') node.className = v;
-      else if(k === 'dataset') Object.assign(node.dataset, v);
-      else if(k === 'text') node.textContent = v ?? '';
-      else if(k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
-      else node.setAttribute(k, v);
+    for (const [k, v] of Object.entries(props || {})) {
+      if (k === 'class') node.className = v;
+      else if (k === 'text') node.textContent = v ?? '';
+      else if (k === 'html') node.innerHTML = v ?? '';
+      else if (k === 'dataset') Object.assign(node.dataset, v);
+      else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (v !== undefined && v !== null) node.setAttribute(k, v);
     }
-    for(const c of children){
-      if(c == null) continue;
+    for (const c of children) {
+      if (c === null || c === undefined) continue;
       node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
     }
     return node;
   }
 
-  function fmt(...parts){
-    return parts.filter(x => (x ?? '').toString().trim().length).join(' • ');
+  const clampList = (arr, n) => arr.slice(0, n);
+  const uniq = (arr) => Array.from(new Set((arr || []).map(x => (x ?? '').toString().trim()).filter(Boolean)));
+
+  function nowHHMM() {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+
+  function toast(msg) {
+    // очень лёгкий toast без зависимостей
+    const t = el('div', { class: 'toast', text: msg });
+    document.body.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('show'));
+    setTimeout(() => {
+      t.classList.remove('show');
+      setTimeout(() => t.remove(), 250);
+    }, 1600);
+  }
+
+  // ---------- Data / Settings ----------
+  const defaultData = () => ({ v: 2, requests: [], delivered: [], shifts: [] });
+
+  const defaultSettings = () => ({
+    ui: {
+      startScreen: 'shift',
+      compact: false,
+      requestFields: { num: true, type: true, kusp: true, addr: true, desc: true, t1: true, t2: true, t3: true, result: true },
+      deliveredFields: { fio: true, time: true, reason: true }
+    },
+    dict: { types: [], results: [], reasons: [] },
+    // backward-compat: старые подсказки
+    templates: { result: [], reason: [] }
+  });
+
+  let data = loadData();
+  let settings = loadSettings();
+
+  function loadData() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(DATA_KEY));
+      const base = defaultData();
+      if (!raw) return base;
+      // миграция v1 -> v2
+      if (!raw.v) {
+        return { v: 2, requests: raw.requests || [], delivered: raw.delivered || [], shifts: [] };
+      }
+      return { ...base, ...raw, shifts: Array.isArray(raw.shifts) ? raw.shifts : [] };
+    } catch {
+      return defaultData();
+    }
+  }
+
+  function saveData() {
+    localStorage.setItem(DATA_KEY, JSON.stringify(data));
+  }
+
+  function loadSettings() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+      const base = defaultSettings();
+      const s = { ...base, ...(raw || {}) };
+
+      // миграция: старые theme/haptics удаляем
+      delete s.theme;
+      delete s.haptics;
+
+      s.dict = s.dict || base.dict;
+      s.templates = s.templates || base.templates;
+      s.ui = s.ui || base.ui;
+
+      // templates -> dict если справочники пустые
+      const tRes = uniq(s.templates.result || []);
+      const tRea = uniq(s.templates.reason || []);
+      s.dict.types = uniq(s.dict.types || []);
+      s.dict.results = uniq(s.dict.results || tRes);
+      s.dict.reasons = uniq(s.dict.reasons || tRea);
+
+      s.ui.startScreen = s.ui.startScreen || 'shift';
+      s.ui.compact = !!s.ui.compact;
+      s.ui.requestFields = { ...base.ui.requestFields, ...(s.ui.requestFields || {}) };
+      s.ui.deliveredFields = { ...base.ui.deliveredFields, ...(s.ui.deliveredFields || {}) };
+
+      return s;
+    } catch {
+      return defaultSettings();
+    }
+  }
+
+  function saveSettings() {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }
+
+  function applyCompact() {
+    document.body.classList.toggle('compact', !!settings.ui.compact);
+  }
+
+  function pushDict(kind, value) {
+    const v = (value ?? '').toString().trim();
+    if (!v) return;
+
+    settings.dict = settings.dict || { types: [], results: [], reasons: [] };
+
+    if (kind === 'type') settings.dict.types = uniq([v, ...(settings.dict.types || [])]);
+    if (kind === 'result') settings.dict.results = uniq([v, ...(settings.dict.results || [])]);
+    if (kind === 'reason') settings.dict.reasons = uniq([v, ...(settings.dict.reasons || [])]);
+
+    // old templates (backward)
+    if (kind === 'result') settings.templates.result = clampList(uniq([v, ...(settings.templates.result || [])]), 12);
+    if (kind === 'reason') settings.templates.reason = clampList(uniq([v, ...(settings.templates.reason || [])]), 12);
+
+    saveSettings();
+  }
+
+  // ---------- Navigation ----------
+  let currentScreen = settings.ui.startScreen || 'shift';
+
+  function switchScreen(name) {
+    currentScreen = name;
+    for (const scr of document.querySelectorAll('.screen')) {
+      scr.classList.toggle('active', scr.id === `screen-${name}`);
+    }
+    for (const btn of document.querySelectorAll('[data-screen]')) {
+      btn.classList.toggle('active', btn.dataset.screen === name);
+      btn.setAttribute('aria-current', btn.dataset.screen === name ? 'page' : 'false');
+    }
+    render();
+  }
+
+  // ---------- Modal ----------
+  let editContext = null; // {scope:'request'|'delivered', index:number}
+
+  function openModal({ title, fields, initialValues = {}, onSubmit }) {
+    const modal = $('#modal');
+    $('#modalTitle').textContent = title;
+    const form = $('#modalForm');
+    form.innerHTML = '';
+
+    // строим форму
+    fields.forEach((f) => {
+      form.appendChild(el('label', { text: f.label }));
+
+      const common = { name: f.name };
+      if (f.required) common.required = 'required';
+
+      const initial = (initialValues[f.name] ?? '').toString();
+
+      let input;
+      if (f.type === 'textarea') {
+        input = el('textarea', common);
+        input.value = initial;
+      } else {
+        input = el('input', {
+          ...common,
+          type: f.type || 'text',
+          placeholder: f.placeholder || undefined,
+          inputmode: f.inputmode || undefined,
+          pattern: f.pattern || undefined,
+          list: f.datalistId || undefined
+        });
+        input.value = initial;
+      }
+
+      if (f.datalistId && Array.isArray(f.datalistOptions)) {
+        // remove old datalist with same id if exists inside form
+        const old = form.querySelector(`#${CSS.escape(f.datalistId)}`);
+        if (old) old.remove();
+        form.appendChild(el('datalist', { id: f.datalistId }, f.datalistOptions.map((x) => el('option', { value: x }))));
+      }
+
+      if (f.now) {
+        form.appendChild(
+          el('div', { class: 'input-row' }, [
+            input,
+            el('button', {
+              type: 'button',
+              class: 'now-btn',
+              text: 'Сейчас',
+              onClick: () => {
+                input.value = nowHHMM();
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+            })
+          ])
+        );
+      } else {
+        form.appendChild(input);
+      }
+    });
+
+    // submit
+    const submitHandler = (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(form);
+      const obj = Object.fromEntries(fd.entries());
+      onSubmit(obj);
+      closeModal();
+    };
+
+    form.onsubmit = submitHandler;
+
+    modal.classList.remove('hidden');
+    document.body.classList.add('modal-open');
+
+    // focus first field
+    setTimeout(() => {
+      const first = form.querySelector('input, textarea, select');
+      if (first) first.focus();
+    }, 0);
+  }
+
+  function closeModal() {
+    $('#modal').classList.add('hidden');
+    document.body.classList.remove('modal-open');
+    editContext = null;
+  }
+
+  $('#cancelModal').addEventListener('click', closeModal);
+
+  // ---------- Field config ----------
+  const REQUEST_FIELD_META = [
+    ['num', 'Номер'],
+    ['type', 'Тип'],
+    ['kusp', 'КУСП'],
+    ['addr', 'Адрес'],
+    ['desc', 'Описание'],
+    ['t1', 't1 (выезд)'],
+    ['t2', 't2 (прибытие)'],
+    ['t3', 't3 (завершение)'],
+    ['result', 'Результат']
+  ];
+
+  const DELIVERED_FIELD_META = [
+    ['fio', 'ФИО'],
+    ['time', 'Время'],
+    ['reason', 'Основание']
+  ];
+
+  function buildChecklist(containerId, meta, stateObj, onChange) {
+    const root = $(`#${containerId}`);
+    if (!root) return;
+    root.innerHTML = '';
+    meta.forEach(([key, label]) => {
+      const id = `${containerId}-${key}`;
+      const input = el('input', { id, type: 'checkbox' });
+      input.checked = !!stateObj[key];
+      input.addEventListener('change', () => onChange(key, input.checked));
+      root.appendChild(
+        el('label', { class: 'check', for: id }, [
+          input,
+          el('span', { text: label })
+        ])
+      );
+    });
+  }
+
+  // ---------- CRUD / Modals ----------
+  function openRequestModal(index = null) {
+    const isEdit = typeof index === 'number';
+    const r = isEdit ? data.requests[index] : null;
+
+    editContext = isEdit ? { scope: 'request', index } : { scope: 'request', index: null };
+
+    const init = isEdit ? { ...r } : {};
+
+    const fields = [
+      { label: 'Номер', name: 'num', required: true, type: 'text', inputmode: 'numeric', pattern: '^[0-9]+$' },
+      { label: 'Тип', name: 'type', type: 'text', datalistId: 'dlType', datalistOptions: settings.dict.types || [] },
+      { label: 'КУСП', name: 'kusp', type: 'text' },
+      { label: 'Адрес', name: 'addr', type: 'text', required: true },
+      { label: 'Описание', name: 'desc', type: 'textarea' },
+      { label: 't1 (выезд)', name: 't1', type: 'time', now: true },
+      { label: 't2 (прибытие)', name: 't2', type: 'time', now: true },
+      { label: 't3 (завершение)', name: 't3', type: 'time', now: true },
+      { label: 'Результат', name: 'result', type: 'text', datalistId: 'dlResult', datalistOptions: settings.dict.results || [] }
+    ];
+
+    openModal({
+      title: isEdit ? 'Изменить заявку' : 'Новая заявка',
+      fields,
+      initialValues: init,
+      onSubmit: (o) => {
+        const obj = {
+          num: (o.num || '').toString().trim(),
+          type: (o.type || '').toString().trim(),
+          kusp: (o.kusp || '').toString().trim(),
+          addr: (o.addr || '').toString().trim(),
+          desc: (o.desc || '').toString().trim(),
+          t1: (o.t1 || '').toString().trim(),
+          t2: (o.t2 || '').toString().trim(),
+          t3: (o.t3 || '').toString().trim(),
+          result: (o.result || '').toString().trim(),
+          updatedAt: Date.now(),
+          createdAt: isEdit ? (r.createdAt || Date.now()) : Date.now()
+        };
+
+        if (!obj.num || !/^\d+$/.test(obj.num)) {
+          toast('Номер должен быть цифрами');
+          return;
+        }
+        if (!obj.addr) {
+          toast('Адрес обязателен');
+          return;
+        }
+
+        if (obj.type) pushDict('type', obj.type);
+        if (obj.result) pushDict('result', obj.result);
+
+        if (isEdit) data.requests[index] = obj;
+        else data.requests.unshift(obj);
+
+        saveData();
+        render();
+      }
+    });
+  }
+
+  function openDeliveredModal(index = null) {
+    const isEdit = typeof index === 'number';
+    const d = isEdit ? data.delivered[index] : null;
+
+    editContext = isEdit ? { scope: 'delivered', index } : { scope: 'delivered', index: null };
+
+    const init = isEdit ? { ...d } : { time: nowHHMM() };
+
+    const fields = [
+      { label: 'ФИО', name: 'name', required: true, type: 'text' },
+      { label: 'Время доставления', name: 'time', type: 'time', now: true },
+      { label: 'Основание', name: 'reason', type: 'text', datalistId: 'dlReason', datalistOptions: settings.dict.reasons || [] }
+    ];
+
+    openModal({
+      title: isEdit ? 'Изменить доставление' : 'Доставленные',
+      fields,
+      initialValues: init,
+      onSubmit: (o) => {
+        const obj = {
+          name: (o.name || '').toString().trim(),
+          time: (o.time || '').toString().trim(),
+          reason: (o.reason || '').toString().trim(),
+          updatedAt: Date.now(),
+          createdAt: isEdit ? (d.createdAt || Date.now()) : Date.now()
+        };
+        if (!obj.name) {
+          toast('ФИО обязательно');
+          return;
+        }
+        if (obj.reason) pushDict('reason', obj.reason);
+
+        if (isEdit) data.delivered[index] = obj;
+        else data.delivered.unshift(obj);
+
+        saveData();
+        render();
+      }
+    });
+  }
+
+  function deleteItem(scope, index) {
+    if (scope === 'request') data.requests.splice(index, 1);
+    if (scope === 'delivered') data.delivered.splice(index, 1);
+    saveData();
+    render();
+  }
+
+  // ---------- Quick actions ----------
+  function stampTime(index, key) {
+    const r = data.requests[index];
+    if (!r) return;
+    if (!r[key]) r[key] = nowHHMM();
+    r.updatedAt = Date.now();
+    saveData();
+    render();
+  }
+
+  function finishRequest(index) {
+    const r = data.requests[index];
+    if (!r) return;
+
+    if (!r.t3) r.t3 = nowHHMM();
+    r.updatedAt = Date.now();
+
+    if (!r.result) {
+      // быстрый выбор результата: первый из справочника или prompt
+      const opts = settings.dict.results || [];
+      const hint = opts.length ? `Напр.: ${opts.slice(0, 5).join(', ')}` : '';
+      const val = prompt(`Результат (можно оставить пустым)\n${hint}`) || '';
+      r.result = val.trim();
+      if (r.result) pushDict('result', r.result);
+    }
+
+    saveData();
+    render();
   }
 
   // ---------- Render ----------
-  function render(){
-    renderRequests();
-    renderDelivered();
-    renderSettingsMeta();
+  let requestQuery = '';
+  let deliveredQuery = '';
+
+  function setSearchUI() {
+    $('#requestSearch').value = requestQuery;
+    $('#deliveredSearch').value = deliveredQuery;
   }
 
-  function renderRequests(){
+  function renderRequests() {
     const root = $('#requestsList');
     root.innerHTML = '';
-    const q = requestQuery.trim().toLowerCase();
-    const items = q
-      ? data.requests.map((r,i) => ({r,i})).filter(({r}) => {
-          const hay = `${r.num||''} ${r.addr||''} ${r.kusp||''} ${r.type||''} ${r.desc||''} ${r.result||''}`.toLowerCase();
-          return hay.includes(q);
-        })
-      : data.requests.map((r,i) => ({r,i}));
 
-    items.forEach(({r, i}) => {
+    const q = requestQuery.trim().toLowerCase();
+    const show = settings.ui.requestFields;
+
+    const items = data.requests
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => {
+        if (!q) return true;
+        const hay = `${r.num || ''} ${r.type || ''} ${r.kusp || ''} ${r.addr || ''} ${r.desc || ''} ${r.result || ''}`.toLowerCase();
+        return hay.includes(q);
+      });
+
+    items.forEach(({ r, i }) => {
       const title = `Заявка №${(r.num || '').trim()}`.trim();
 
+      const details = [];
+      if (show.type) details.push(['Тип', r.type]);
+      if (show.kusp) details.push(['КУСП', r.kusp]);
+      if (show.addr) details.push(['Адрес', r.addr]);
+      if (show.desc) details.push(['Описание', r.desc]);
+      if (show.result) details.push(['Результат', r.result]);
+
       const chips = [];
-      if (r.t1) chips.push(`Получ.: ${r.t1}`);
-      if (r.t2) chips.push(`Приб.: ${r.t2}`);
-      if (r.t3) chips.push(`Убыт.: ${r.t3}`);
+      if (show.t1 && r.t1) chips.push(`t1: ${r.t1}`);
+      if (show.t2 && r.t2) chips.push(`t2: ${r.t2}`);
+      if (show.t3 && r.t3) chips.push(`t3: ${r.t3}`);
 
-      const details = [
-        ['Тип', r.type],
-        ['КУСП', r.kusp],
-        ['Адрес', r.addr],
-        ['Описание', r.desc],
-        ['Результат', r.result],
-      ].filter(([,v]) => (v ?? '').toString().trim().length > 0);
-
-      const card = el('div', { class:'card', role:'listitem' }, [
-        el('div', { class:'card-title', text: title }),
+      const card = el('div', { class: 'card', role: 'listitem' }, [
+        el('div', { class: 'card-title', text: title }),
         details.length
-          ? el('div', { class:'card-details' }, details.map(([k,v]) =>
-              el('div', { class:'kv' }, [
-                el('div', { class:'k', text:k }),
-                el('div', { class:'v', text:String(v).trim() })
-              ])
-            ))
-          : el('div', { class:'card-meta', text:'Нет данных' }),
-        chips.length
-          ? el('div', { class:'chips' }, chips.map(t => el('span', { class:'chip', text:t })))
-          : null,
-        el('div', { class:'quick-actions' }, [
-          el('button', { type:'button', dataset:{ action:'stamp', stamp:'t1', index:String(i) }, text:'Выехал' }),
-          el('button', { type:'button', dataset:{ action:'stamp', stamp:'t2', index:String(i) }, text:'Прибыл' }),
-          el('button', { type:'button', dataset:{ action:'finish', index:String(i) }, text:'Завершил' }),
+          ? el(
+              'div',
+              { class: 'card-details' },
+              details
+                .filter(([, v]) => (v ?? '').toString().trim())
+                .map(([k, v]) =>
+                  el('div', { class: 'kv' }, [el('div', { class: 'k', text: k }), el('div', { class: 'v', text: String(v).trim() })])
+                )
+            )
+          : el('div', { class: 'card-meta', text: 'Нет данных' }),
+        chips.length ? el('div', { class: 'chips' }, chips.map((t) => el('span', { class: 'chip', text: t }))) : null,
+
+        el('div', { class: 'quick-actions' }, [
+          el('button', { type: 'button', dataset: { action: 'stamp', stamp: 't1', scope: 'request', index: String(i) }, text: 'Выехал' }),
+          el('button', { type: 'button', dataset: { action: 'stamp', stamp: 't2', scope: 'request', index: String(i) }, text: 'Прибыл' }),
+          el('button', { type: 'button', dataset: { action: 'finish', scope: 'request', index: String(i) }, text: 'Завершил' })
         ]),
-        el('div', { class:'card-actions' }, [
-          el('button', { class:'edit', type:'button', dataset:{ scope:'request', action:'edit', index:String(i) }, text:'Изменить' }),
-          el('button', { class:'delete', type:'button', dataset:{ scope:'request', action:'delete', index:String(i) }, text:'Удалить' })
-        ])
-      ].filter(Boolean));
 
-      root.appendChild(card);
-    });
-  }
-
-  function renderDelivered(){
-    const root = $('#deliveredList');
-    root.innerHTML = '';
-    const q = deliveredQuery.trim().toLowerCase();
-    const items = q
-      ? data.delivered.map((d,i) => ({d,i})).filter(({d}) => {
-          const hay = `${d.name||''} ${d.reason||''} ${d.time||''}`.toLowerCase();
-          return hay.includes(q);
-        })
-      : data.delivered.map((d,i) => ({d,i}));
-
-    items.forEach(({d,i}) => {
-      const title = (d.name || '').trim() || 'Доставление';
-      const details = [
-        ['Время', d.time],
-        ['Основание', d.reason],
-      ].filter(([,v]) => (v ?? '').toString().trim().length > 0);
-
-      const card = el('div', { class:'card', role:'listitem' }, [
-        el('div', { class:'card-title', text: title }),
-        details.length
-          ? el('div', { class:'card-details' }, details.map(([k,v]) =>
-              el('div', { class:'kv' }, [
-                el('div', { class:'k', text:k }),
-                el('div', { class:'v', text:String(v).trim() })
-              ])
-            ))
-          : el('div', { class:'card-meta', text:'Нет данных' }),
-        el('div', { class:'card-actions' }, [
-          el('button', { class:'edit', type:'button', dataset:{ scope:'delivered', action:'edit', index:String(i) }, text:'Изменить' }),
-          el('button', { class:'delete', type:'button', dataset:{ scope:'delivered', action:'delete', index:String(i) }, text:'Удалить' })
+        el('div', { class: 'card-actions' }, [
+          el('button', { class: 'edit', type: 'button', dataset: { action: 'edit', scope: 'request', index: String(i) }, text: 'Изменить' }),
+          el('button', { class: 'delete', type: 'button', dataset: { action: 'delete', scope: 'request', index: String(i) }, text: 'Удалить' })
         ])
       ]);
+
       root.appendChild(card);
     });
   }
 
-  // Event delegation for lists
-  function handleListClick(e){
-    const btn = e.target.closest('button[data-action]');
-    if(!btn) return;
-    const action = btn.dataset.action;
-    const index = Number(btn.dataset.index);
-    if(Number.isNaN(index)) return;
+  function renderDelivered() {
+    const root = $('#deliveredList');
+    root.innerHTML = '';
 
-    // Fast actions for requests
-    if(action === 'stamp'){
-      haptic();
-      const field = btn.dataset.stamp;
-      const r = data.requests[index];
-      if(!r) return;
-      r[field] = r[field] || nowHHMM();
-      saveData(); render();
+    const q = deliveredQuery.trim().toLowerCase();
+    const show = settings.ui.deliveredFields;
+
+    const items = data.delivered
+      .map((d, i) => ({ d, i }))
+      .filter(({ d }) => {
+        if (!q) return true;
+        const hay = `${d.name || ''} ${d.time || ''} ${d.reason || ''}`.toLowerCase();
+        return hay.includes(q);
+      });
+
+    items.forEach(({ d, i }) => {
+      const title = (show.fio ? (d.name || '').trim() : '') || 'Доставленные';
+
+      const details = [];
+      if (show.time) details.push(['Время', d.time]);
+      if (show.reason) details.push(['Основание', d.reason]);
+
+      const card = el('div', { class: 'card', role: 'listitem' }, [
+        el('div', { class: 'card-title', text: title }),
+        details.length
+          ? el(
+              'div',
+              { class: 'card-details' },
+              details
+                .filter(([, v]) => (v ?? '').toString().trim())
+                .map(([k, v]) => el('div', { class: 'kv' }, [el('div', { class: 'k', text: k }), el('div', { class: 'v', text: String(v).trim() })]))
+            )
+          : el('div', { class: 'card-meta', text: 'Нет данных' }),
+        el('div', { class: 'card-actions' }, [
+          el('button', { class: 'edit', type: 'button', dataset: { action: 'edit', scope: 'delivered', index: String(i) }, text: 'Изменить' }),
+          el('button', { class: 'delete', type: 'button', dataset: { action: 'delete', scope: 'delivered', index: String(i) }, text: 'Удалить' })
+        ])
+      ]);
+
+      root.appendChild(card);
+    });
+  }
+
+  // ---------- Shift stats + archive (Stage 2) ----------
+  function durationMinutes(t1, t3) {
+    // ожидаем HH:MM
+    if (!t1 || !t3) return null;
+    const [h1, m1] = t1.split(':').map(Number);
+    const [h3, m3] = t3.split(':').map(Number);
+    if ([h1, m1, h3, m3].some((x) => Number.isNaN(x))) return null;
+    return (h3 * 60 + m3) - (h1 * 60 + m1);
+  }
+
+  function renderShiftStats() {
+    const root = $('#shiftStats');
+    if (!root) return;
+
+    const total = data.requests.length;
+    const del = data.delivered.length;
+
+    const mins = data.requests
+      .map((r) => durationMinutes(r.t1, r.t3))
+      .filter((x) => typeof x === 'number' && x >= 0);
+
+    const avg = mins.length ? Math.round(mins.reduce((a, b) => a + b, 0) / mins.length) : null;
+    const max = mins.length ? Math.max(...mins) : null;
+
+    root.innerHTML = '';
+    root.appendChild(el('div', { class: 'kv' }, [el('div', { class: 'k', text: 'Заявок в смене' }), el('div', { class: 'v', text: String(total) })]));
+    root.appendChild(el('div', { class: 'kv' }, [el('div', { class: 'k', text: 'Доставленных' }), el('div', { class: 'v', text: String(del) })]));
+    root.appendChild(el('div', { class: 'kv' }, [el('div', { class: 'k', text: 'Среднее t1→t3' }), el('div', { class: 'v', text: avg === null ? '—' : `${avg} мин` })]));
+    root.appendChild(el('div', { class: 'kv' }, [el('div', { class: 'k', text: 'Максимум t1→t3' }), el('div', { class: 'v', text: max === null ? '—' : `${max} мин` })]));
+  }
+
+  function closeShift() {
+    if (!data.requests.length && !data.delivered.length) {
+      toast('Смена пустая');
+      return;
+    }
+    const ok = confirm('Закрыть смену и отправить данные в архив?');
+    if (!ok) return;
+
+    data.shifts.unshift({
+      id: crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()),
+      closedAt: Date.now(),
+      requests: data.requests,
+      delivered: data.delivered
+    });
+
+    data.requests = [];
+    data.delivered = [];
+    saveData();
+    render();
+    toast('Смена закрыта');
+  }
+
+  function renderArchive() {
+    const root = $('#shiftArchive');
+    if (!root) return;
+    root.innerHTML = '';
+
+    if (!data.shifts.length) {
+      root.appendChild(el('div', { class: 'muted', text: 'Архив пуст' }));
       return;
     }
 
-    if(action === 'finish'){
-      haptic();
-      const r = data.requests[index];
-      if(!r) return;
-      r.t3 = r.t3 || nowHHMM();
-      if(!(r.result || '').trim()){
-        const sug = (settings.templates?.result?.[0] || '').toString();
-        const res = prompt('Результат (можно оставить пустым):', sug);
-        if(res !== null) r.result = (res || '').trim();
+    data.shifts.forEach((s, idx) => {
+      const dt = new Date(s.closedAt);
+      const label = dt.toLocaleString('ru-RU', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const reqN = s.requests?.length || 0;
+      const delN = s.delivered?.length || 0;
+
+      const row = el('div', { class: 'archive-item' }, [
+        el('div', { class: 'archive-main' }, [
+          el('div', { class: 'archive-title', text: `Смена ${label}` }),
+          el('div', { class: 'archive-meta', text: `Заявок: ${reqN} · Доставлено: ${delN}` })
+        ]),
+        el('div', { class: 'archive-actions' }, [
+          el('button', { class: 'edit', type: 'button', text: 'JSON', dataset: { action: 'exportShift', index: String(idx) } }),
+          el('button', { class: 'delete', type: 'button', text: 'Удалить', dataset: { action: 'deleteShift', index: String(idx) } })
+        ])
+      ]);
+
+      root.appendChild(row);
+    });
+  }
+
+  // ---------- Export / Import ----------
+  function download(filename, text) {
+    const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportData() {
+    download(`shiftmanager-backup-${Date.now()}.json`, JSON.stringify({ data, settings }, null, 2));
+  }
+
+  function exportCurrentShift() {
+    download(`shiftmanager-shift-${Date.now()}.json`, JSON.stringify({ requests: data.requests, delivered: data.delivered }, null, 2));
+  }
+
+  async function importDataFromFile(ev) {
+    const file = ev.target.files?.[0];
+    ev.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const obj = JSON.parse(text);
+
+      if (obj.data) data = { ...defaultData(), ...obj.data };
+      if (obj.settings) settings = { ...defaultSettings(), ...obj.settings };
+
+      saveData();
+      saveSettings();
+      applyCompact();
+      render();
+      toast('Импортировано');
+    } catch {
+      toast('Не удалось импортировать файл');
+    }
+  }
+
+  function clearAllData() {
+    const ok = confirm('Очистить все данные и настройки?');
+    if (!ok) return;
+    localStorage.removeItem(DATA_KEY);
+    localStorage.removeItem(SETTINGS_KEY);
+    data = defaultData();
+    settings = defaultSettings();
+    applyCompact();
+    render();
+    toast('Очищено');
+  }
+
+  // ---------- Dictionaries editor ----------
+  function editDictionary(kind, title) {
+    const map = { types: 'types', results: 'results', reasons: 'reasons' };
+    const key = map[kind];
+    const current = uniq(settings.dict?.[key] || []);
+    openModal({
+      title,
+      fields: [
+        { label: 'Значения (по одному на строку)', name: 'list', type: 'textarea', placeholder: '' }
+      ],
+      initialValues: { list: current.join('\n') },
+      onSubmit: (o) => {
+        const list = uniq((o.list || '').split('\n').map((x) => x.trim())).slice(0, 200);
+        settings.dict[key] = list;
+        saveSettings();
+        render(); // обновить datalist и UI
+        toast('Сохранено');
       }
-      pushTemplate('result', r.result);
-      saveData(); render();
-      return;
+    });
+  }
+
+  // ---------- Settings UI ----------
+  function renderSettingsMeta() {
+    $('#appVersion').textContent = `v${APP_VERSION}`;
+    renderShiftStats();
+    renderArchive();
+
+    // checklist
+    buildChecklist('reqFields', REQUEST_FIELD_META, settings.ui.requestFields, (k, v) => {
+      settings.ui.requestFields[k] = v;
+      saveSettings();
+      render();
+    });
+
+    buildChecklist('delFields', DELIVERED_FIELD_META, settings.ui.deliveredFields, (k, v) => {
+      settings.ui.deliveredFields[k] = v;
+      saveSettings();
+      render();
+    });
+
+    // compact
+    const compactToggle = $('#compactToggle');
+    if (compactToggle) {
+      compactToggle.checked = !!settings.ui.compact;
     }
 
-    // Cards use data-scope; keep backward compatibility with older builds that used data-kind.
-    const kind = btn.dataset.scope || btn.dataset.kind;
+    const startSel = $('#startScreenSelect');
+    if (startSel) startSel.value = settings.ui.startScreen || 'shift';
+  }
 
-    if(action === 'delete'){
-      haptic();
-      if(!confirm('Удалить запись?')) return;
-      if(kind === 'request') data.requests.splice(index, 1);
-      else data.delivered.splice(index, 1);
-      saveData(); render();
-      return;
-    }
+  function initSettingsUI() {
+    $('#exportBtn').addEventListener('click', exportData);
+    $('#importBtn').addEventListener('click', () => $('#importFile').click());
+    $('#importFile').addEventListener('change', importDataFromFile);
+    $('#clearBtn').addEventListener('click', clearAllData);
 
-    if(action === 'edit'){
-      if(kind === 'request') openRequestModal(index);
-      else openDeliveredModal(index);
+    $('#exportShiftBtn').addEventListener('click', exportCurrentShift);
+    $('#closeShiftBtn').addEventListener('click', closeShift);
+
+    $('#editTypesBtn').addEventListener('click', () => editDictionary('types', 'Справочник: типы'));
+    $('#editResultsBtn').addEventListener('click', () => editDictionary('results', 'Справочник: результаты'));
+    $('#editReasonsBtn').addEventListener('click', () => editDictionary('reasons', 'Справочник: основания'));
+
+    $('#compactToggle').addEventListener('change', (e) => {
+      settings.ui.compact = !!e.target.checked;
+      saveSettings();
+      applyCompact();
+      render();
+    });
+
+    $('#startScreenSelect').addEventListener('change', (e) => {
+      settings.ui.startScreen = e.target.value;
+      saveSettings();
+      toast('Сохранено');
+    });
+
+    // archive actions (delegation)
+    $('#shiftArchive').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const idx = Number(btn.dataset.index);
+      if (Number.isNaN(idx)) return;
+
+      if (action === 'exportShift') {
+        const s = data.shifts[idx];
+        if (!s) return;
+        download(`shiftmanager-archive-${s.closedAt}.json`, JSON.stringify(s, null, 2));
+      }
+      if (action === 'deleteShift') {
+        const ok = confirm('Удалить смену из архива?');
+        if (!ok) return;
+        data.shifts.splice(idx, 1);
+        saveData();
+        render();
+      }
+    });
+  }
+
+  // ---------- Lists click handling ----------
+  function handleListClick(e) {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const scope = btn.dataset.scope;
+    const index = Number(btn.dataset.index);
+
+    if (Number.isNaN(index)) return;
+
+    if (action === 'edit') {
+      if (scope === 'request') openRequestModal(index);
+      if (scope === 'delivered') openDeliveredModal(index);
+    } else if (action === 'delete') {
+      const ok = confirm('Удалить запись?');
+      if (!ok) return;
+      deleteItem(scope, index);
+    } else if (action === 'stamp') {
+      stampTime(index, btn.dataset.stamp);
+    } else if (action === 'finish') {
+      finishRequest(index);
     }
   }
 
   $('#requestsList').addEventListener('click', handleListClick);
   $('#deliveredList').addEventListener('click', handleListClick);
 
-  // ---------- Modal (dynamic form with prefilling + validation) ----------
-  let editContext = null;
-
-  function openModal({ title, fields, initialValues = {}, onSubmit }){
-    haptic();
-    $('#modalTitle').textContent = title;
-    const form = $('#modalForm');
-    form.innerHTML = '';
-
-    fields.forEach(f => {
-      form.appendChild(el('label', { text: f.label }));
-      let input;
-      const common = { name: f.name };
-      if(f.required) common.required = 'required';
-
-      const value = (initialValues[f.name] ?? '').toString();
-
-      if(f.type === 'select'){
-        input = el('select', common, (f.options || []).map(opt => el('option', { value: opt, text: opt })));
-        input.value = value || (f.options?.[0] ?? '');
-      }else if(f.type === 'textarea'){
-        input = el('textarea', common);
-        input.value = value;
-      }else{
-        input = el('input', { ...common, type: f.type || 'text', inputmode: f.inputmode || undefined, placeholder: f.placeholder || undefined, list: f.datalistId || undefined });
-        input.value = value;
-        if(f.pattern) input.setAttribute('pattern', f.pattern);
-      }
-
-      // Add optional "Now" button for time fields
-      if(f.now){
-        const row = el('div', { class:'input-row' }, [
-          input,
-          el('button', { class:'now-btn', type:'button', text:'Сейчас', onClick: () => { input.value = nowTime(); } })
-        ]);
-        form.appendChild(row);
-      }else{
-        form.appendChild(input);
-      }
-
-      // Add optional datalist element for suggestions
-      if(f.datalistId && Array.isArray(f.datalistOptions)){
-        form.appendChild(el('datalist', { id: f.datalistId }, f.datalistOptions.map(x => el('option', { value: x }))));
-      }
+  // ---------- Search ----------
+  function initSearch() {
+    $('#requestSearch').addEventListener('input', (e) => {
+      requestQuery = e.target.value || '';
+      render();
     });
+    $('#deliveredSearch').addEventListener('input', (e) => {
+      deliveredQuery = e.target.value || '';
+      render();
+    });
+  }
 
-    form.onsubmit = (e) => {
-      e.preventDefault();
-      const fd = new FormData(form);
-      const obj = Object.fromEntries(fd.entries());
+  // ---------- Service worker ----------
+  function initServiceWorker() {
+    if (!('serviceWorker' in navigator)) {
+      $('#pwaStatus').textContent = 'Service Worker: недоступен';
+      return;
+    }
 
-      const err = validate(fields, obj);
-      if(err){
-        alert(err);
+    navigator.serviceWorker
+      .register('sw.js')
+      .then(() => updatePwaStatus())
+      .catch(() => ($('#pwaStatus').textContent = 'Service Worker: ошибка'));
+
+    $('#updateCacheBtn').addEventListener('click', async () => {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.update()));
+      toast('Запрошено обновление кэша');
+      updatePwaStatus();
+    });
+  }
+
+  async function updatePwaStatus() {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        $('#pwaStatus').textContent = 'Service Worker: не установлен';
         return;
       }
-
-      onSubmit(obj);
-      closeModal();
-    };
-
-    document.body.classList.add('modal-open');
-    $('#modal').classList.remove('hidden');
-  }
-
-  function closeModal(){
-    $('#modal').classList.add('hidden');
-    $('#modalForm').onsubmit = null;
-    editContext = null;
-    document.body.classList.remove('modal-open');
-  }
-
-  $('#cancelModal').addEventListener('click', closeModal);
-
-  function validate(fields, obj){
-    for(const f of fields){
-      if(f.required){
-        const v = (obj[f.name] ?? '').toString().trim();
-        if(!v) return `Поле «${f.label}» обязательно.`;
-      }
-      if(f.name === 'num'){
-        const v = (obj.num ?? '').toString().trim();
-        if(v && !/^[0-9]+$/.test(v)) return 'Номер заявки должен содержать только цифры.';
-      }
-    }
-    return '';
-  }
-
-  function openRequestModal(index = null){
-    editContext = index;
-    const isEdit = index !== null;
-    const initial = isEdit ? (data.requests[index] || {}) : {};
-    const fields = [
-      { label:'Номер заявки', name:'num', required:true, type:'text', inputmode:'numeric', pattern:'[0-9]+' },
-      { label:'Тип', name:'type', type:'select', options:['Адрес','Улица'] },
-      { label:'Время получения', name:'t1', type:'time', now:true },
-      { label:'Время прибытия', name:'t2', type:'time', now:true },
-      { label:'Время убытия', name:'t3', type:'time', now:true },
-      { label:'КУСП', name:'kusp', type:'text', inputmode:'numeric' },
-      { label:'Адрес', name:'addr', type:'text' },
-      { label:'Описание', name:'desc', type:'textarea' },
-      { label:'Результат', name:'result', type:'text', datalistId:'dlResult', datalistOptions: settings.templates?.result || [] }
-    ];
-
-    openModal({
-      title: isEdit ? 'Изменить заявку' : 'Новая заявка',
-      fields,
-      initialValues: initial,
-      onSubmit: (o) => {
-        // Normalize
-        o.num = (o.num || '').trim();
-        if((o.result || '').trim()) pushTemplate('result', o.result);
-        if(editContext !== null) data.requests[editContext] = o;
-        else data.requests.push(o);
-        saveData(); render();
-      }
-    });
-  }
-
-  function openDeliveredModal(index = null){
-    editContext = index;
-    const isEdit = index !== null;
-    const initial = isEdit ? (data.delivered[index] || {}) : {};
-    const fields = [
-      { label:'ФИО', name:'name', required:true, type:'text' },
-      { label:'Время доставления', name:'time', type:'time', now:true },
-      { label:'Основание', name:'reason', type:'text', datalistId:'dlReason', datalistOptions: settings.templates?.reason || [] }
-    ];
-
-    openModal({
-      title: isEdit ? 'Изменить доставление' : 'Доставленный',
-      fields,
-      initialValues: initial,
-      onSubmit: (o) => {
-        o.name = (o.name || '').trim();
-        if((o.reason || '').trim()) pushTemplate('reason', o.reason);
-        if(editContext !== null) data.delivered[editContext] = o;
-        else data.delivered.push(o);
-        saveData(); render();
-      }
-    });
-  }
-
-  // ---------- Search ----------
-  function initSearch(){
-    const rq = $('#requestSearch');
-    const dq = $('#deliveredSearch');
-    rq.addEventListener('input', () => {
-      requestQuery = rq.value;
-      renderRequests();
-    });
-    dq.addEventListener('input', () => {
-      deliveredQuery = dq.value;
-      renderDelivered();
-    });
-  }
-
-  // ---------- Utils ----------
-  function nowTime(){
-    const d = new Date();
-    const hh = String(d.getHours()).padStart(2,'0');
-    const mm = String(d.getMinutes()).padStart(2,'0');
-    return `${hh}:${mm}`;
-  }
-
-  function nowHHMM(){
-    return nowTime();
-  }
-
-  // Prevent pinch zoom on iOS Safari (meta viewport alone isn't always enough)
-  document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive:false });
-  document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive:false });
-  document.addEventListener('gestureend', (e) => e.preventDefault(), { passive:false });
-
-  $('#addRequestBtn').addEventListener('click', () => openRequestModal(null));
-  $('#addDeliveredBtn').addEventListener('click', () => openDeliveredModal(null));
-
-  // ---------- Settings UI ----------
-  function renderSettingsMeta(){
-    $('#appVersion').textContent = `v${APP_VERSION}`;
-  }
-
-  function initSettingsUI(){
-    const themeSelect = $('#themeSelect');
-    const hapticsToggle = $('#hapticsToggle');
-
-    themeSelect.value = settings.theme;
-    hapticsToggle.checked = !!settings.haptics;
-
-    themeSelect.addEventListener('change', () => {
-      settings.theme = themeSelect.value;
-      saveSettings();
-      applyTheme();
-    });
-
-    hapticsToggle.addEventListener('change', () => {
-      settings.haptics = hapticsToggle.checked;
-      saveSettings();
-    });
-
-    $('#exportBtn').addEventListener('click', exportData);
-    $('#importBtn').addEventListener('click', () => $('#importFile').click());
-    $('#importFile').addEventListener('change', importDataFromFile);
-    $('#clearBtn').addEventListener('click', clearAllData);
-    $('#updateCacheBtn').addEventListener('click', updateServiceWorker);
-  }
-
-  function exportData(){
-    haptic();
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      appVersion: APP_VERSION,
-      data
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `shift-data-${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  }
-
-  async function importDataFromFile(e){
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if(!file) return;
-    try{
-      const text = await file.text();
-      const payload = JSON.parse(text);
-
-      const incoming = payload?.data ?? payload; // allow raw data import
-      const migrated = (() => {
-        if(typeof incoming?.v !== 'number'){
-          return { v: DATA_VERSION, requests: incoming.requests || [], delivered: incoming.delivered || [] };
-        }
-        return { ...defaultData(), ...incoming };
-      })();
-
-      if(!confirm('Импорт перезапишет текущие данные. Продолжить?')) return;
-      data = migrated;
-      saveData();
-      render();
-      alert('Импорт выполнен.');
-    }catch{
-      alert('Не удалось импортировать: файл повреждён или имеет неверный формат.');
+      $('#pwaStatus').textContent = reg.active ? 'Офлайн-кэш: активен' : 'Офлайн-кэш: устанавливается…';
+    } catch {
+      $('#pwaStatus').textContent = 'Офлайн-кэш: неизвестно';
     }
   }
 
-  function clearAllData(){
-    haptic();
-    if(!confirm('Точно очистить ВСЕ данные смены и доставленных?')) return;
-    data = defaultData();
-    saveData();
-    render();
+  // ---------- Bind buttons / nav ----------
+  function initNav() {
+    document.querySelectorAll('[data-screen]').forEach((btn) => {
+      btn.addEventListener('click', () => switchScreen(btn.dataset.screen));
+    });
   }
 
-  // ---------- Service Worker ----------
-  function setPwaStatus(text){
-    const el = $('#pwaStatus');
-    if(el) el.textContent = text;
+  function initActions() {
+    $('#addRequestBtn').addEventListener('click', () => openRequestModal(null));
+    $('#addDeliveredBtn').addEventListener('click', () => openDeliveredModal(null));
   }
 
-  async function updateServiceWorker(){
-    haptic();
-    if(!('serviceWorker' in navigator)){
-      setPwaStatus('Офлайн-кэш: не поддерживается браузером');
-      return;
-    }
-    try{
-      const reg = await navigator.serviceWorker.getRegistration();
-      if(reg){
-        await reg.update();
-        setPwaStatus('Офлайн-кэш: обновление запрошено');
-      }else{
-        setPwaStatus('Офлайн-кэш: ещё не установлен');
-      }
-    }catch{
-      setPwaStatus('Офлайн-кэш: ошибка обновления');
-    }
-  }
+  // ---------- Disable pinch zoom (extra for iOS) ----------
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('gesturechange', (e) => e.preventDefault());
+  document.addEventListener('gestureend', (e) => e.preventDefault());
 
-  async function initServiceWorker(){
-    if(!('serviceWorker' in navigator)){
-      setPwaStatus('Офлайн-кэш: не поддерживается браузером');
-      return;
-    }
-    try{
-      const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-      setPwaStatus(reg.active ? 'Офлайн-кэш: активен' : 'Офлайн-кэш: устанавливается');
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        setPwaStatus('Офлайн-кэш: обновлён');
-      });
-    }catch{
-      setPwaStatus('Офлайн-кэш: не удалось включить');
-    }
+  // ---------- Render root ----------
+  function render() {
+    applyCompact();
+    setSearchUI();
+    renderRequests();
+    renderDelivered();
+    renderSettingsMeta();
   }
 
   // ---------- Init ----------
-  applyTheme();
-  initSettingsUI();
+  applyCompact();
+  initNav();
+  initActions();
   initSearch();
+  initSettingsUI();
   initServiceWorker();
-  render();
+  switchScreen(currentScreen);
 })();

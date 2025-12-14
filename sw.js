@@ -1,5 +1,5 @@
 /* Simple offline cache for static assets */
-const CACHE_VERSION = 'v1.1.0';
+const CACHE_VERSION = 'v1.3.0';
 const CACHE_NAME = `shift-cache-${CACHE_VERSION}`;
 
 const ASSETS = [
