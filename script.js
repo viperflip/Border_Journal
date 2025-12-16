@@ -2,7 +2,7 @@
   'use strict';
 
   // ---------- Constants ----------
-  const APP_VERSION = '3.0.0-stage3';
+  const APP_VERSION = '3.1.0-stage3-assists';
   const DATA_KEY = 'shift_manager_data_v2';
   const SETTINGS_KEY = 'shift_manager_settings_v2';
 
@@ -48,16 +48,17 @@
   }
 
   // ---------- Data / Settings ----------
-  const defaultData = () => ({ v: 2, requests: [], delivered: [], shifts: [] });
+  const defaultData = () => ({ v: 2, requests: [], delivered: [], assists: [], shifts: [] });
 
   const defaultSettings = () => ({
     ui: {
       startScreen: 'shift',
       compact: false,
       requestFields: { num: true, type: true, kusp: true, addr: true, desc: true, t1: true, t2: true, t3: true, result: true },
-      deliveredFields: { fio: true, time: true, reason: true }
+      deliveredFields: { fio: true, time: true, reason: true },
+      assistFields: { service: true, note: true, start: true, end: true, delta: true }
     },
-    dict: { types: [], results: [], reasons: [] },
+    dict: { types: [], results: [], reasons: [], services: [] },
     // backward-compat: старые подсказки
     templates: { result: [], reason: [] }
   });
@@ -72,7 +73,7 @@
       if (!raw) return base;
       // миграция v1 -> v2
       if (!raw.v) {
-        return { v: 2, requests: raw.requests || [], delivered: raw.delivered || [], shifts: [] };
+        return { v: 2, requests: raw.requests || [], delivered: raw.delivered || [], assists: [], shifts: [] };
       }
       return { ...base, ...raw, shifts: Array.isArray(raw.shifts) ? raw.shifts : [] };
     } catch {
@@ -89,12 +90,18 @@
       const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY));
       const base = defaultSettings();
       const s = { ...base, ...(raw || {}) };
+      s.assists = Array.isArray(s.assists) ? s.assists : [];
+      s.shifts = Array.isArray(s.shifts) ? s.shifts : [];
+      // ensure archived shifts contain assists
+      s.shifts = s.shifts.map(sh => ({ ...sh, assists: Array.isArray(sh.assists) ? sh.assists : [] }));
 
       // миграция: старые theme/haptics удаляем
       delete s.theme;
       delete s.haptics;
 
       s.dict = s.dict || base.dict;
+      s.dict.services = Array.isArray(s.dict.services) ? s.dict.services : base.dict.services;
+      s.ui.assistFields = s.ui.assistFields || base.ui.assistFields;
       s.templates = s.templates || base.templates;
       s.ui = s.ui || base.ui;
 
@@ -388,8 +395,95 @@
   function deleteItem(scope, index) {
     if (scope === 'request') data.requests.splice(index, 1);
     if (scope === 'delivered') data.delivered.splice(index, 1);
+    if (scope === 'assist') data.assists.splice(index, 1);
     saveData();
     render();
+  }
+
+  // ---------- Assists (Содействия) ----------
+  function parseHHMM(s) {
+    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec((s ?? '').toString().trim());
+    if (!m) return null;
+    return Number(m[1]) * 60 + Number(m[2]);
+  }
+
+  function formatMinutes(mins) {
+    const m = Math.max(0, Math.round(mins));
+    const hh = String(Math.floor(m / 60)).padStart(2, '0');
+    const mm = String(m % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+
+  function assistDurationMinutes(start, end) {
+    const s = parseHHMM(start);
+    const e = parseHHMM(end);
+    if (s === null || e === null) return null;
+    return e >= s ? e - s : (24 * 60 - s) + e; // переход через полночь
+  }
+
+  function openAssistModal(index) {
+    const isEdit = typeof index === 'number' && index >= 0;
+    const a = isEdit ? (data.assists[index] || {}) : {};
+
+    const init = isEdit ? { ...a } : { start: nowHHMM(), end: '' };
+
+    const fields = [
+      { label: 'Служба', name: 'service', required: true, type: 'text', datalistId: 'dlService', datalistOptions: settings.dict.services || [] },
+      { label: 'Заметка', name: 'note', type: 'text' },
+      { label: 'Начало', name: 'start', required: true, type: 'time', now: true },
+      { label: 'Окончание', name: 'end', required: true, type: 'time', now: true }
+    ];
+
+    openModal({
+      title: isEdit ? 'Изменить содействие' : 'Новое содействие',
+      fields,
+      initialValues: init,
+      onSubmit: (o) => {
+        const service = (o.service || '').toString().trim();
+        const note = (o.note || '').toString().trim();
+        const start = (o.start || '').toString().trim();
+        const end = (o.end || '').toString().trim();
+
+        if (!service) {
+          toast('Служба обязательна');
+          return;
+        }
+
+        const mins = assistDurationMinutes(start, end);
+        if (mins === null) {
+          toast('Неверный формат времени');
+          return;
+        }
+
+        // страховка от случайной ошибки: слишком большой интервал
+        if (mins > 12 * 60) {
+          const ok = confirm(`Интервал ${formatMinutes(mins)} выглядит слишком большим. Сохранить?`);
+          if (!ok) return;
+        }
+
+        const obj = {
+          service,
+          note,
+          start,
+          end,
+          minutes: mins,
+          updatedAt: Date.now(),
+          createdAt: isEdit ? (a.createdAt || Date.now()) : Date.now()
+        };
+
+        // пополнить справочник служб
+        if (service) {
+          settings.dict.services = uniq([service, ...(settings.dict.services || [])]);
+          saveSettings();
+        }
+
+        if (isEdit) data.assists[index] = obj;
+        else data.assists.unshift(obj);
+
+        saveData();
+        render();
+      }
+    });
   }
 
   // ---------- Quick actions ----------
@@ -425,10 +519,12 @@
   // ---------- Render ----------
   let requestQuery = '';
   let deliveredQuery = '';
+  let assistQuery = '';
 
   function setSearchUI() {
     $('#requestSearch').value = requestQuery;
     $('#deliveredSearch').value = deliveredQuery;
+    const a = $('#assistSearch'); if (a) a.value = assistQuery;
   }
 
   function renderRequests() {
@@ -535,6 +631,60 @@
     });
   }
 
+  function renderAssists() {
+    const root = $('#assistsList');
+    const totalEl = $('#assistTotal');
+    if (!root || !totalEl) return;
+
+    root.innerHTML = '';
+
+    const q = assistQuery.trim().toLowerCase();
+    const show = settings.ui.assistFields || {};
+
+    const items = (data.assists || [])
+      .map((a, i) => ({ a, i }))
+      .filter(({ a }) => {
+        if (!q) return true;
+        const hay = `${a.service || ''} ${a.note || ''} ${a.start || ''} ${a.end || ''}`.toLowerCase();
+        return hay.includes(q);
+      });
+
+    const totalMins = (data.assists || []).reduce((sum, a) => sum + (Number(a.minutes) || 0), 0);
+    totalEl.textContent = `Итого за смену: ${formatMinutes(totalMins)}`;
+
+    if (!items.length) {
+      root.appendChild(el('div', { class: 'muted', text: 'Пока нет содействий' }));
+      return;
+    }
+
+    items.forEach(({ a, i }) => {
+      const details = [];
+      if (show.service) details.push(['Служба', a.service]);
+      if (show.note) details.push(['Заметка', a.note]);
+      if (show.start || show.end) details.push(['Время', `${a.start || '—'} — ${a.end || '—'}`]);
+      if (show.delta) details.push(['Δ', formatMinutes(Number(a.minutes) || assistDurationMinutes(a.start, a.end) || 0)]);
+
+      const title = (a.service || 'Содействие').trim();
+
+      const card = el('div', { class: 'card', role: 'listitem' }, [
+        el('div', { class: 'card-title', text: title }),
+        el(
+          'div',
+          { class: 'card-details' },
+          details
+            .filter(([, v]) => (v ?? '').toString().trim())
+            .map(([k, v]) => el('div', { class: 'kv' }, [el('div', { class: 'k', text: k }), el('div', { class: 'v', text: String(v).trim() })]))
+        ),
+        el('div', { class: 'card-actions' }, [
+          el('button', { class: 'edit', type: 'button', dataset: { action: 'edit', scope: 'assist', index: String(i) }, text: 'Изменить' }),
+          el('button', { class: 'delete', type: 'button', dataset: { action: 'delete', scope: 'assist', index: String(i) }, text: 'Удалить' })
+        ])
+      ]);
+
+      root.appendChild(card);
+    });
+  }
+
   // ---------- Shift stats + archive (Stage 2) ----------
   function durationMinutes(t1, t3) {
     // ожидаем HH:MM
@@ -567,7 +717,7 @@
   }
 
   function closeShift() {
-    if (!data.requests.length && !data.delivered.length) {
+    if (!data.requests.length && !data.delivered.length && !(data.assists && data.assists.length)) {
       toast('Смена пустая');
       return;
     }
@@ -578,11 +728,13 @@
       id: crypto?.randomUUID ? crypto.randomUUID() : String(Date.now()),
       closedAt: Date.now(),
       requests: data.requests,
-      delivered: data.delivered
+      delivered: data.delivered,
+      assists: data.assists
     });
 
     data.requests = [];
     data.delivered = [];
+    data.assists = [];
     saveData();
     render();
     toast('Смена закрыта');
@@ -635,7 +787,7 @@
   }
 
   function exportCurrentShift() {
-    download(`shiftmanager-shift-${Date.now()}.json`, JSON.stringify({ requests: data.requests, delivered: data.delivered }, null, 2));
+    download(`shiftmanager-shift-${Date.now()}.json`, JSON.stringify({ requests: data.requests, delivered: data.delivered, assists: data.assists }, null, 2));
   }
 
   async function importDataFromFile(ev) {
@@ -673,7 +825,7 @@
 
   // ---------- Dictionaries editor ----------
   function editDictionary(kind, title) {
-    const map = { types: 'types', results: 'results', reasons: 'reasons' };
+    const map = { types: 'types', results: 'results', reasons: 'reasons', services: 'services' };
     const key = map[kind];
     const current = uniq(settings.dict?.[key] || []);
     openModal({
@@ -711,6 +863,14 @@
       render();
     });
 
+
+    buildChecklist('assistFields', ASSIST_FIELD_META, settings.ui.assistFields, (k, v) => {
+      settings.ui.assistFields[k] = v;
+      saveSettings();
+      render();
+    });
+
+
     // compact
     const compactToggle = $('#compactToggle');
     if (compactToggle) {
@@ -733,6 +893,7 @@
     $('#editTypesBtn').addEventListener('click', () => editDictionary('types', 'Справочник: типы'));
     $('#editResultsBtn').addEventListener('click', () => editDictionary('results', 'Справочник: результаты'));
     $('#editReasonsBtn').addEventListener('click', () => editDictionary('reasons', 'Справочник: основания'));
+    $('#editServicesBtn').addEventListener('click', () => editDictionary('services', 'Справочник: службы'));
 
     $('#compactToggle').addEventListener('change', (e) => {
       settings.ui.compact = !!e.target.checked;
@@ -783,6 +944,7 @@
     if (action === 'edit') {
       if (scope === 'request') openRequestModal(index);
       if (scope === 'delivered') openDeliveredModal(index);
+      if (scope === 'assist') openAssistModal(index);
     } else if (action === 'delete') {
       const ok = confirm('Удалить запись?');
       if (!ok) return;
@@ -796,6 +958,8 @@
 
   $('#requestsList').addEventListener('click', handleListClick);
   $('#deliveredList').addEventListener('click', handleListClick);
+  $('#assistsList')?.addEventListener('click', handleListClick);
+  $('#assistsList')?.addEventListener('click', handleListClick);
 
   // ---------- Search ----------
   function initSearch() {
@@ -805,6 +969,10 @@
     });
     $('#deliveredSearch').addEventListener('input', (e) => {
       deliveredQuery = e.target.value || '';
+      render();
+    });
+    $('#assistSearch')?.addEventListener('input', (e) => {
+      assistQuery = e.target.value || '';
       render();
     });
   }
@@ -852,6 +1020,7 @@
   function initActions() {
     $('#addRequestBtn').addEventListener('click', () => openRequestModal(null));
     $('#addDeliveredBtn').addEventListener('click', () => openDeliveredModal(null));
+    $('#addAssistBtn')?.addEventListener('click', () => openAssistModal(null));
   }
 
   // ---------- Disable pinch zoom (extra for iOS) ----------
@@ -865,6 +1034,7 @@
     setSearchUI();
     renderRequests();
     renderDelivered();
+    renderAssists();
     renderSettingsMeta();
   }
 

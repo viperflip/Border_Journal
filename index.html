@@ -41,7 +41,20 @@
     <div id="deliveredList" class="cards" role="list"></div>
   </main>
 
-  <main id="screen-settings" class="screen" aria-label="Настройки">
+  
+  <main id="screen-assists" class="screen" aria-label="Содействия">
+    <header class="header">
+      <h2 class="screen-title">Содействия</h2>
+      <button id="addAssistBtn" class="primary" type="button">+ Содействие</button>
+    </header>
+    <div class="toolbar">
+      <input id="assistSearch" class="search" type="search" placeholder="Поиск: служба, заметка…" autocomplete="off">
+      <div class="assist-total" id="assistTotal" aria-label="Итого времени содействия"></div>
+    </div>
+    <div id="assistsList" class="cards" role="list"></div>
+  </main>
+
+<main id="screen-settings" class="screen" aria-label="Настройки">
     <header class="header">
       <h2 class="screen-title">Настройки</h2>
       <span class="muted" id="appVersion"></span>
@@ -91,6 +104,10 @@
             <div class="panel-title">Карточка «Доставленные»</div>
             <div id="delFields" class="checklist"></div>
           </div>
+          <div class="panel">
+            <div class="panel-title">Карточка «Содействия»</div>
+            <div id="assistFields" class="checklist"></div>
+          </div>
         </div>
         <div class="row space-top">
           <div>
@@ -110,6 +127,7 @@
           <select id="startScreenSelect" class="compact">
             <option value="shift">Смена</option>
             <option value="delivered">Доставленные</option>
+            <option value="assists">Содействия</option>
             <option value="settings">Настройки</option>
           </select>
         </div>
@@ -139,22 +157,20 @@
 
   <nav class="bottom-nav" aria-label="Навигация">
     <button data-screen="shift" class="nav-btn active" type="button" aria-label="Смена">
-      <span class="nav-ico" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M9 2h6l1 3h4v17H4V5h4l1-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 9h6M9 13h6M9 17h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-      </span>
+      <span class="nav-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 4H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="M8 10h8"/><path d="M8 14h8"/><path d="M8 18h5"/></svg></span>
       <span class="nav-label">Смена</span>
     </button>
     <button data-screen="delivered" class="nav-btn" type="button" aria-label="Доставленные">
-      <span class="nav-ico" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M20 7 10 17l-4-4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4h16" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
-      </span>
-      <span class="nav-label">Доставл.</span>
+      <span class="nav-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 5-6"/></svg></span>
+      <span class="nav-label">Доставленные</span>
+    </button>
+    <button data-screen="assists" class="nav-btn" type="button" aria-label="Содействия">
+      <span class="nav-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12l2-2a3 3 0 1 1 4 4l-3 3"/><path d="M12 12l-2 2a3 3 0 1 1-4-4l3-3"/><path d="M14 14l-4-4"/></svg></span>
+      <span class="nav-label">Содействия</span>
     </button>
     <button data-screen="settings" class="nav-btn" type="button" aria-label="Настройки">
-      <span class="nav-ico" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a7.9 7.9 0 0 0 .1-2l2-1.2-2-3.4-2.3.6a8 8 0 0 0-1.7-1L13.9 5H10l-.6 2.9c-.6.3-1.2.6-1.7 1L5.4 8.3l-2 3.4 2 1.2a7.9 7.9 0 0 0 .1 2l-2 1.2 2 3.4 2.3-.6c.5.4 1.1.7 1.7 1L10.1 21H14l.6-2.9c.6-.3 1.2-.6 1.7-1l2.3.6 2-3.4-2-1.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-      </span>
-      <span class="nav-label">Настр.</span>
+      <span class="nav-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/><circle cx="12" cy="12" r="4"/></svg></span>
+      <span class="nav-label">Настройки</span>
     </button>
   </nav>
 
