@@ -1,12 +1,20 @@
 (() => {
   'use strict';
 
-  // ---------- Constants ----------
+  // ==============================
+  // Constants
+  // ==============================
   const APP_VERSION = '3.1.0-stage3-assists';
   const DATA_KEY = 'shift_manager_data_v2';
   const SETTINGS_KEY = 'shift_manager_settings_v2';
 
-  // ---------- Helpers ----------
+  const BACKUP_KEY = 'shift_manager_backups_v2';
+  const BACKUP_LIMIT = 5;
+  const SAVE_DEBOUNCE_MS = 150;
+
+  // ==============================
+  // DOM helpers
+  // ==============================
   const $ = (sel) => document.querySelector(sel);
 
   function el(tag, props = {}, children = []) {
@@ -28,6 +36,43 @@
 
   const clampList = (arr, n) => arr.slice(0, n);
   const uniq = (arr) => Array.from(new Set((arr || []).map(x => (x ?? '').toString().trim()).filter(Boolean)));
+
+  // ==============================
+  // IDs / time utils (минимальная "полировка")
+  // ==============================
+  const newId = () => (crypto?.randomUUID ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(16).slice(2)}`);
+
+  function parseHHMM(s) {
+    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec((s ?? '').toString().trim());
+    if (!m) return null;
+    return Number(m[1]) * 60 + Number(m[2]);
+  }
+
+  function formatMinutes(mins) {
+    const m = Math.max(0, Math.round(Number(mins) || 0));
+    const hh = String(Math.floor(m / 60)).padStart(2, '0');
+    const mm = String(m % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+
+  // Разница между двумя HH:MM, учитывая переход через полночь.
+  // Возвращает null, если формат времени неверный.
+  function diffWithMidnight(start, end) {
+    const s = parseHHMM(start);
+    const e = parseHHMM(end);
+    if (s === null || e === null) return null;
+    return e >= s ? e - s : (24 * 60 - s) + e;
+  }
+
+  function ensureIds(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((x) => (x && typeof x === 'object' ? (x.id ? x : { ...x, id: newId() }) : x));
+  }
+
+  function findIndexById(arr, id) {
+    if (!Array.isArray(arr)) return -1;
+    return arr.findIndex((x) => x && typeof x === 'object' && String(x.id) === String(id));
+  }
 
   function nowHHMM() {
     const d = new Date();
@@ -66,23 +111,106 @@
   let data = loadData();
   let settings = loadSettings();
 
-  function loadData() {
+  window.addEventListener('beforeunload', () => {
+    try { persistDataNow(); } catch {}
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
+  });
+
+
+  function migrateData(d) {
+    const base = defaultData();
+    const out = { ...base, ...(d || {}) };
+
+    // v1 -> v2
+    if (!out.v) {
+      out.v = 2;
+      out.assists = out.assists || [];
+      out.shifts = out.shifts || [];
+    }
+
+    out.requests = ensureIds(out.requests);
+    out.delivered = ensureIds(out.delivered);
+    out.assists = ensureIds(out.assists);
+    out.shifts = ensureIds(out.shifts).map((sh) => ({
+      ...sh,
+      requests: ensureIds(sh.requests),
+      delivered: ensureIds(sh.delivered),
+      assists: ensureIds(sh.assists)
+    }));
+
+    return out;
+  }
+
+  function safeParse(key) {
     try {
-      const raw = JSON.parse(localStorage.getItem(DATA_KEY));
-      const base = defaultData();
-      if (!raw) return base;
-      // миграция v1 -> v2
-      if (!raw.v) {
-        return { v: 2, requests: raw.requests || [], delivered: raw.delivered || [], assists: [], shifts: [] };
-      }
-      return { ...base, ...raw, shifts: Array.isArray(raw.shifts) ? raw.shifts : [] };
+      const s = localStorage.getItem(key);
+      if (!s) return null;
+      return JSON.parse(s);
     } catch {
-      return defaultData();
+      return null;
     }
   }
 
-  function saveData() {
-    localStorage.setItem(DATA_KEY, JSON.stringify(data));
+  function loadBackups() {
+    const b = safeParse(BACKUP_KEY);
+    return Array.isArray(b) ? b : [];
+  }
+
+  function saveBackups(list) {
+    try {
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(list.slice(0, BACKUP_LIMIT)));
+    } catch {
+      // ignore quota errors
+    }
+  }
+
+  function addBackup(snapshot) {
+    const entry = { ts: Date.now(), data: snapshot };
+    const list = loadBackups();
+    list.unshift(entry);
+    // drop duplicates by ts is enough; also cap size
+    saveBackups(list);
+  }
+
+  function loadData() {
+    const raw = safeParse(DATA_KEY);
+    if (raw) return migrateData(raw);
+
+    // If main data is corrupted, try the newest backup.
+    const backups = loadBackups();
+    for (const b of backups) {
+      try {
+        if (b && b.data) {
+          const migrated = migrateData(b.data);
+          // restore
+          data = migrated;
+          persistDataNow(); // write back the recovered state
+          return migrated;
+        }
+      } catch {
+        // keep trying older backups
+      }
+    }
+    return defaultData();
+  }
+
+  let saveDataTimer = null;
+  function scheduleSaveData() {
+    clearTimeout(saveDataTimer);
+    saveDataTimer = setTimeout(persistDataNow, SAVE_DEBOUNCE_MS);
+  }
+
+  function persistDataNow() {
+    try {
+      // Keep mini-backup of the last known-good state (post-migration).
+      addBackup(JSON.parse(JSON.stringify(data)));
+      localStorage.setItem(DATA_KEY, JSON.stringify(data));
+    } catch {
+      // ignore quota / serialization issues
+    }
+
+  // Backward-compat alias
+  const saveData = scheduleSaveData;
   }
 
   function loadSettings() {
@@ -123,9 +251,22 @@
     }
   }
 
-  function saveSettings() {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  let saveSettingsTimer = null;
+  function scheduleSaveSettings() {
+    clearTimeout(saveSettingsTimer);
+    saveSettingsTimer = setTimeout(persistSettingsNow, SAVE_DEBOUNCE_MS);
   }
+
+  function persistSettingsNow() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch {
+      // ignore quota errors
+    }
+  }
+
+  // Backward-compat alias
+  const saveSettings = scheduleSaveSettings;
 
   function applyCompact() {
     document.body.classList.toggle('compact', !!settings.ui.compact);
@@ -163,8 +304,10 @@
     render();
   }
 
-  // ---------- Modal ----------
-  let editContext = null; // {scope:'request'|'delivered', index:number}
+  // ==============================
+  // Modal
+  // ==============================
+  let editContext = null; // {scope:'request'|'delivered'|'assist', id:string|null}
 
   function openModal({ title, fields, initialValues = {}, onSubmit }) {
     const modal = $('#modal');
@@ -253,7 +396,9 @@
 
   $('#cancelModal').addEventListener('click', closeModal);
 
-  // ---------- Field config ----------
+  // ==============================
+  // Field config
+  // ==============================
   const REQUEST_FIELD_META = [
     ['num', 'Номер'],
     ['type', 'Тип'],
@@ -270,6 +415,14 @@
     ['fio', 'ФИО'],
     ['time', 'Время'],
     ['reason', 'Основание']
+  ];
+
+  const ASSIST_FIELD_META = [
+    ['service', 'Служба'],
+    ['note', 'Заметка'],
+    ['start', 'Начало'],
+    ['end', 'Окончание'],
+    ['delta', 'Δ']
   ];
 
   function buildChecklist(containerId, meta, stateObj, onChange) {
@@ -290,14 +443,17 @@
     });
   }
 
-  // ---------- CRUD / Modals ----------
-  function openRequestModal(index = null) {
-    const isEdit = typeof index === 'number';
-    const r = isEdit ? data.requests[index] : null;
+  // ==============================
+  // CRUD / Modals
+  // ==============================
+  function openRequestModal(id = null) {
+    const isEdit = !!id;
+    const index = isEdit ? findIndexById(data.requests, id) : -1;
+    const r = isEdit && index >= 0 ? data.requests[index] : null;
 
-    editContext = isEdit ? { scope: 'request', index } : { scope: 'request', index: null };
+    editContext = { scope: 'request', id: isEdit ? String(id) : null };
 
-    const init = isEdit ? { ...r } : {};
+    const init = r ? { ...r } : {};
 
     const fields = [
       { label: 'Номер', name: 'num', required: true, type: 'text', inputmode: 'numeric', pattern: '^[0-9]+$' },
@@ -316,7 +472,9 @@
       fields,
       initialValues: init,
       onSubmit: (o) => {
+        const prev = r || null;
         const obj = {
+          id: prev?.id || newId(),
           num: (o.num || '').toString().trim(),
           type: (o.type || '').toString().trim(),
           kusp: (o.kusp || '').toString().trim(),
@@ -327,7 +485,7 @@
           t3: (o.t3 || '').toString().trim(),
           result: (o.result || '').toString().trim(),
           updatedAt: Date.now(),
-          createdAt: isEdit ? (r.createdAt || Date.now()) : Date.now()
+          createdAt: prev?.createdAt || Date.now()
         };
 
         if (!obj.num || !/^\d+$/.test(obj.num)) {
@@ -342,22 +500,21 @@
         if (obj.type) pushDict('type', obj.type);
         if (obj.result) pushDict('result', obj.result);
 
-        if (isEdit) data.requests[index] = obj;
+        if (isEdit && index >= 0) data.requests[index] = obj;
         else data.requests.unshift(obj);
-
-        saveData();
-        render();
+      dispatch();
       }
     });
   }
 
-  function openDeliveredModal(index = null) {
-    const isEdit = typeof index === 'number';
-    const d = isEdit ? data.delivered[index] : null;
+  function openDeliveredModal(id = null) {
+    const isEdit = !!id;
+    const index = isEdit ? findIndexById(data.delivered, id) : -1;
+    const d = isEdit && index >= 0 ? data.delivered[index] : null;
 
-    editContext = isEdit ? { scope: 'delivered', index } : { scope: 'delivered', index: null };
+    editContext = { scope: 'delivered', id: isEdit ? String(id) : null };
 
-    const init = isEdit ? { ...d } : { time: nowHHMM() };
+    const init = d ? { ...d } : { time: nowHHMM() };
 
     const fields = [
       { label: 'ФИО', name: 'name', required: true, type: 'text' },
@@ -370,12 +527,14 @@
       fields,
       initialValues: init,
       onSubmit: (o) => {
+        const prev = d || null;
         const obj = {
+          id: prev?.id || newId(),
           name: (o.name || '').toString().trim(),
           time: (o.time || '').toString().trim(),
           reason: (o.reason || '').toString().trim(),
           updatedAt: Date.now(),
-          createdAt: isEdit ? (d.createdAt || Date.now()) : Date.now()
+          createdAt: prev?.createdAt || Date.now()
         };
         if (!obj.name) {
           toast('ФИО обязательно');
@@ -383,47 +542,39 @@
         }
         if (obj.reason) pushDict('reason', obj.reason);
 
-        if (isEdit) data.delivered[index] = obj;
+        if (isEdit && index >= 0) data.delivered[index] = obj;
         else data.delivered.unshift(obj);
-
-        saveData();
-        render();
+      dispatch();
       }
     });
   }
 
-  function deleteItem(scope, index) {
-    if (scope === 'request') data.requests.splice(index, 1);
-    if (scope === 'delivered') data.delivered.splice(index, 1);
-    if (scope === 'assist') data.assists.splice(index, 1);
-    saveData();
-    render();
+  function deleteItem(scope, id) {
+    if (!id) return;
+    if (scope === 'request') {
+      const idx = findIndexById(data.requests, id);
+      if (idx >= 0) data.requests.splice(idx, 1);
+    }
+    if (scope === 'delivered') {
+      const idx = findIndexById(data.delivered, id);
+      if (idx >= 0) data.delivered.splice(idx, 1);
+    }
+    if (scope === 'assist') {
+      const idx = findIndexById(data.assists, id);
+      if (idx >= 0) data.assists.splice(idx, 1);
+    }
+      dispatch();
   }
 
-  // ---------- Assists (Содействия) ----------
-  function parseHHMM(s) {
-    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec((s ?? '').toString().trim());
-    if (!m) return null;
-    return Number(m[1]) * 60 + Number(m[2]);
-  }
+  // ==============================
+  // Assists (Содействия)
+  // ==============================
+  function openAssistModal(id = null) {
+    const isEdit = !!id;
+    const index = isEdit ? findIndexById(data.assists, id) : -1;
+    const a = isEdit && index >= 0 ? (data.assists[index] || {}) : {};
 
-  function formatMinutes(mins) {
-    const m = Math.max(0, Math.round(mins));
-    const hh = String(Math.floor(m / 60)).padStart(2, '0');
-    const mm = String(m % 60).padStart(2, '0');
-    return `${hh}:${mm}`;
-  }
-
-  function assistDurationMinutes(start, end) {
-    const s = parseHHMM(start);
-    const e = parseHHMM(end);
-    if (s === null || e === null) return null;
-    return e >= s ? e - s : (24 * 60 - s) + e; // переход через полночь
-  }
-
-  function openAssistModal(index) {
-    const isEdit = typeof index === 'number' && index >= 0;
-    const a = isEdit ? (data.assists[index] || {}) : {};
+    editContext = { scope: 'assist', id: isEdit ? String(id) : null };
 
     const init = isEdit ? { ...a } : { start: nowHHMM(), end: '' };
 
@@ -449,7 +600,7 @@
           return;
         }
 
-        const mins = assistDurationMinutes(start, end);
+        const mins = diffWithMidnight(start, end);
         if (mins === null) {
           toast('Неверный формат времени');
           return;
@@ -462,6 +613,7 @@
         }
 
         const obj = {
+          id: a.id || newId(),
           service,
           note,
           start,
@@ -477,27 +629,26 @@
           saveSettings();
         }
 
-        if (isEdit) data.assists[index] = obj;
+        if (isEdit && index >= 0) data.assists[index] = obj;
         else data.assists.unshift(obj);
-
-        saveData();
-        render();
+      dispatch();
       }
     });
   }
 
   // ---------- Quick actions ----------
-  function stampTime(index, key) {
-    const r = data.requests[index];
+  function stampTime(id, key) {
+    const index = findIndexById(data.requests, id);
+    const r = index >= 0 ? data.requests[index] : null;
     if (!r) return;
     if (!r[key]) r[key] = nowHHMM();
     r.updatedAt = Date.now();
-    saveData();
-    render();
+      dispatch();
   }
 
-  function finishRequest(index) {
-    const r = data.requests[index];
+  function finishRequest(id) {
+    const index = findIndexById(data.requests, id);
+    const r = index >= 0 ? data.requests[index] : null;
     if (!r) return;
 
     if (!r.t3) r.t3 = nowHHMM();
@@ -511,9 +662,7 @@
       r.result = val.trim();
       if (r.result) pushDict('result', r.result);
     }
-
-    saveData();
-    render();
+      dispatch();
   }
 
   // ---------- Render ----------
@@ -535,14 +684,14 @@
     const show = settings.ui.requestFields;
 
     const items = data.requests
-      .map((r, i) => ({ r, i }))
+      .map((r) => ({ r }))
       .filter(({ r }) => {
         if (!q) return true;
         const hay = `${r.num || ''} ${r.type || ''} ${r.kusp || ''} ${r.addr || ''} ${r.desc || ''} ${r.result || ''}`.toLowerCase();
         return hay.includes(q);
       });
 
-    items.forEach(({ r, i }) => {
+    items.forEach(({ r }) => {
       const title = `Заявка №${(r.num || '').trim()}`.trim();
 
       const details = [];
@@ -573,14 +722,14 @@
         chips.length ? el('div', { class: 'chips' }, chips.map((t) => el('span', { class: 'chip', text: t }))) : null,
 
         el('div', { class: 'quick-actions' }, [
-          el('button', { type: 'button', dataset: { action: 'stamp', stamp: 't1', scope: 'request', index: String(i) }, text: 'Выехал' }),
-          el('button', { type: 'button', dataset: { action: 'stamp', stamp: 't2', scope: 'request', index: String(i) }, text: 'Прибыл' }),
-          el('button', { type: 'button', dataset: { action: 'finish', scope: 'request', index: String(i) }, text: 'Завершил' })
+          el('button', { type: 'button', dataset: { action: 'stamp', stamp: 't1', scope: 'request', id: String(r.id) }, text: 'Выехал' }),
+          el('button', { type: 'button', dataset: { action: 'stamp', stamp: 't2', scope: 'request', id: String(r.id) }, text: 'Прибыл' }),
+          el('button', { type: 'button', dataset: { action: 'finish', scope: 'request', id: String(r.id) }, text: 'Завершил' })
         ]),
 
         el('div', { class: 'card-actions' }, [
-          el('button', { class: 'edit', type: 'button', dataset: { action: 'edit', scope: 'request', index: String(i) }, text: 'Изменить' }),
-          el('button', { class: 'delete', type: 'button', dataset: { action: 'delete', scope: 'request', index: String(i) }, text: 'Удалить' })
+          el('button', { class: 'edit', type: 'button', dataset: { action: 'edit', scope: 'request', id: String(r.id) }, text: 'Изменить' }),
+          el('button', { class: 'delete', type: 'button', dataset: { action: 'delete', scope: 'request', id: String(r.id) }, text: 'Удалить' })
         ])
       ]);
 
@@ -596,14 +745,14 @@
     const show = settings.ui.deliveredFields;
 
     const items = data.delivered
-      .map((d, i) => ({ d, i }))
+      .map((d) => ({ d }))
       .filter(({ d }) => {
         if (!q) return true;
         const hay = `${d.name || ''} ${d.time || ''} ${d.reason || ''}`.toLowerCase();
         return hay.includes(q);
       });
 
-    items.forEach(({ d, i }) => {
+    items.forEach(({ d }) => {
       const title = (show.fio ? (d.name || '').trim() : '') || 'Доставленные';
 
       const details = [];
@@ -622,8 +771,8 @@
             )
           : el('div', { class: 'card-meta', text: 'Нет данных' }),
         el('div', { class: 'card-actions' }, [
-          el('button', { class: 'edit', type: 'button', dataset: { action: 'edit', scope: 'delivered', index: String(i) }, text: 'Изменить' }),
-          el('button', { class: 'delete', type: 'button', dataset: { action: 'delete', scope: 'delivered', index: String(i) }, text: 'Удалить' })
+          el('button', { class: 'edit', type: 'button', dataset: { action: 'edit', scope: 'delivered', id: String(d.id) }, text: 'Изменить' }),
+          el('button', { class: 'delete', type: 'button', dataset: { action: 'delete', scope: 'delivered', id: String(d.id) }, text: 'Удалить' })
         ])
       ]);
 
@@ -642,7 +791,7 @@
     const show = settings.ui.assistFields || {};
 
     const items = (data.assists || [])
-      .map((a, i) => ({ a, i }))
+      .map((a) => ({ a }))
       .filter(({ a }) => {
         if (!q) return true;
         const hay = `${a.service || ''} ${a.note || ''} ${a.start || ''} ${a.end || ''}`.toLowerCase();
@@ -657,12 +806,12 @@
       return;
     }
 
-    items.forEach(({ a, i }) => {
+    items.forEach(({ a }) => {
       const details = [];
       if (show.service) details.push(['Служба', a.service]);
       if (show.note) details.push(['Заметка', a.note]);
       if (show.start || show.end) details.push(['Время', `${a.start || '—'} — ${a.end || '—'}`]);
-      if (show.delta) details.push(['Δ', formatMinutes(Number(a.minutes) || assistDurationMinutes(a.start, a.end) || 0)]);
+      if (show.delta) details.push(['Δ', formatMinutes(Number(a.minutes) || diffWithMidnight(a.start, a.end) || 0)]);
 
       const title = (a.service || 'Содействие').trim();
 
@@ -676,8 +825,8 @@
             .map(([k, v]) => el('div', { class: 'kv' }, [el('div', { class: 'k', text: k }), el('div', { class: 'v', text: String(v).trim() })]))
         ),
         el('div', { class: 'card-actions' }, [
-          el('button', { class: 'edit', type: 'button', dataset: { action: 'edit', scope: 'assist', index: String(i) }, text: 'Изменить' }),
-          el('button', { class: 'delete', type: 'button', dataset: { action: 'delete', scope: 'assist', index: String(i) }, text: 'Удалить' })
+          el('button', { class: 'edit', type: 'button', dataset: { action: 'edit', scope: 'assist', id: String(a.id) }, text: 'Изменить' }),
+          el('button', { class: 'delete', type: 'button', dataset: { action: 'delete', scope: 'assist', id: String(a.id) }, text: 'Удалить' })
         ])
       ]);
 
@@ -687,12 +836,9 @@
 
   // ---------- Shift stats + archive (Stage 2) ----------
   function durationMinutes(t1, t3) {
-    // ожидаем HH:MM
     if (!t1 || !t3) return null;
-    const [h1, m1] = t1.split(':').map(Number);
-    const [h3, m3] = t3.split(':').map(Number);
-    if ([h1, m1, h3, m3].some((x) => Number.isNaN(x))) return null;
-    return (h3 * 60 + m3) - (h1 * 60 + m1);
+    // смена может быть ночной → учитываем полночь
+    return diffWithMidnight(t1, t3);
   }
 
   function renderShiftStats() {
@@ -735,8 +881,7 @@
     data.requests = [];
     data.delivered = [];
     data.assists = [];
-    saveData();
-    render();
+      dispatch();
     toast('Смена закрыта');
   }
 
@@ -798,7 +943,7 @@
       const text = await file.text();
       const obj = JSON.parse(text);
 
-      if (obj.data) data = { ...defaultData(), ...obj.data };
+      if (obj.data) data = migrateData(obj.data);
       if (obj.settings) settings = { ...defaultSettings(), ...obj.settings };
 
       saveData();
@@ -853,21 +998,18 @@
     // checklist
     buildChecklist('reqFields', REQUEST_FIELD_META, settings.ui.requestFields, (k, v) => {
       settings.ui.requestFields[k] = v;
-      saveSettings();
-      render();
+    dispatch(null, { data: false, settings: true });
     });
 
     buildChecklist('delFields', DELIVERED_FIELD_META, settings.ui.deliveredFields, (k, v) => {
       settings.ui.deliveredFields[k] = v;
-      saveSettings();
-      render();
+    dispatch(null, { data: false, settings: true });
     });
 
 
     buildChecklist('assistFields', ASSIST_FIELD_META, settings.ui.assistFields, (k, v) => {
       settings.ui.assistFields[k] = v;
-      saveSettings();
-      render();
+    dispatch(null, { data: false, settings: true });
     });
 
 
@@ -925,8 +1067,7 @@
         const ok = confirm('Удалить смену из архива?');
         if (!ok) return;
         data.shifts.splice(idx, 1);
-        saveData();
-        render();
+      dispatch();
       }
     });
   }
@@ -937,29 +1078,28 @@
     if (!btn) return;
     const action = btn.dataset.action;
     const scope = btn.dataset.scope;
-    const index = Number(btn.dataset.index);
-
-    if (Number.isNaN(index)) return;
+    const id = btn.dataset.id;
+    if (!id) return;
 
     if (action === 'edit') {
-      if (scope === 'request') openRequestModal(index);
-      if (scope === 'delivered') openDeliveredModal(index);
-      if (scope === 'assist') openAssistModal(index);
+      if (scope === 'request') openRequestModal(id);
+      if (scope === 'delivered') openDeliveredModal(id);
+      if (scope === 'assist') openAssistModal(id);
     } else if (action === 'delete') {
       const ok = confirm('Удалить запись?');
       if (!ok) return;
-      deleteItem(scope, index);
+      deleteItem(scope, id);
     } else if (action === 'stamp') {
-      stampTime(index, btn.dataset.stamp);
+      stampTime(id, btn.dataset.stamp);
     } else if (action === 'finish') {
-      finishRequest(index);
+      finishRequest(id);
     }
   }
 
   $('#requestsList').addEventListener('click', handleListClick);
   $('#deliveredList').addEventListener('click', handleListClick);
   $('#assistsList')?.addEventListener('click', handleListClick);
-  $('#assistsList')?.addEventListener('click', handleListClick);
+  
 
   // ---------- Search ----------
   function initSearch() {
@@ -1021,6 +1161,20 @@
     $('#addRequestBtn').addEventListener('click', () => openRequestModal(null));
     $('#addDeliveredBtn').addEventListener('click', () => openDeliveredModal(null));
     $('#addAssistBtn')?.addEventListener('click', () => openAssistModal(null));
+
+    // other one-off buttons can be bound here
+  }
+
+  // ==============================
+  // Dispatch (single save/render pathway)
+  // ==============================
+  function dispatch(mutator, opts = { data: true, settings: false }) {
+    if (typeof mutator === 'function') mutator();
+
+    if (opts.data) scheduleSaveData();
+    if (opts.settings) scheduleSaveSettings();
+
+    render();
   }
 
   // ---------- Disable pinch zoom (extra for iOS) ----------
