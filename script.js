@@ -4,7 +4,7 @@
   // ==============================
   // Constants
   // ==============================
-  const APP_VERSION = '3.1.2';
+  const APP_VERSION = '3.1.3';
   const DATA_KEY = 'shift_manager_data_v2';
   const SETTINGS_KEY = 'shift_manager_settings_v2';
 

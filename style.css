@@ -466,7 +466,9 @@ body.compact .toolbar{gap:8px}
 }
 
 .bottom-nav{
-  padding-bottom: calc(10px + var(--safe-bottom));
+  /* Keep the bar visually fixed-height. Safe-area is handled via bottom offset above,
+     so we must NOT add extra inner padding here (it makes the bar look taller in iOS PWA). */
+  padding-bottom: 6px;
 }
 
 .screen{
