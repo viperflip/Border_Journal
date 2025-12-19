@@ -4,13 +4,16 @@
   // ==============================
   // Constants
   // ==============================
-  const APP_VERSION = '3.1.0-stage3-assists';
+  const APP_VERSION = '3.1.2';
   const DATA_KEY = 'shift_manager_data_v2';
   const SETTINGS_KEY = 'shift_manager_settings_v2';
 
   const BACKUP_KEY = 'shift_manager_backups_v2';
   const BACKUP_LIMIT = 5;
   const SAVE_DEBOUNCE_MS = 150;
+  const USER_FACING_VERSION = APP_VERSION; // shown in UI
+  const VERSION_LABEL = `Версия ${USER_FACING_VERSION}`;
+
 
   // ==============================
   // DOM helpers
@@ -84,6 +87,8 @@
   function toast(msg) {
     // очень лёгкий toast без зависимостей
     const t = el('div', { class: 'toast', text: msg });
+    t.setAttribute('role','status');
+    t.setAttribute('aria-live','polite');
     document.body.appendChild(t);
     requestAnimationFrame(() => t.classList.add('show'));
     setTimeout(() => {
@@ -253,10 +258,10 @@
     } catch {
       // ignore quota / serialization issues
     }
+  }
 
   // Backward-compat alias
   const saveData = scheduleSaveData;
-  }
 
   function loadSettings() {
     try {
@@ -285,12 +290,17 @@
       s.dict.results = uniq(s.dict.results || tRes);
       s.dict.reasons = uniq(s.dict.reasons || tRea);
 
-      s.ui.startScreen = s.ui.startScreen || 'shift';
-      s.ui.compact = !!s.ui.compact;
+      s.ui.startScreen = 'shift';
+      s.ui.compact = false;
       s.ui.requestFields = { ...base.ui.requestFields, ...(s.ui.requestFields || {}) };
       s.ui.deliveredFields = { ...base.ui.deliveredFields, ...(s.ui.deliveredFields || {}) };
 
-      return s;
+      
+      // UI simplification: always show full information
+      Object.keys(s.ui.requestFields).forEach(k => (s.ui.requestFields[k] = true));
+      Object.keys(s.ui.deliveredFields).forEach(k => (s.ui.deliveredFields[k] = true));
+      Object.keys(s.ui.assistFields).forEach(k => (s.ui.assistFields[k] = true));
+return s;
     } catch {
       return defaultSettings();
     }
@@ -314,7 +324,8 @@
   const saveSettings = scheduleSaveSettings;
 
   function applyCompact() {
-    document.body.classList.toggle('compact', !!settings.ui.compact);
+    // Compact mode removed: keep full spacing.
+    document.body.classList.remove('compact');
   }
 
   function pushDict(kind, value) {
@@ -335,7 +346,7 @@
   }
 
   // ---------- Navigation ----------
-  let currentScreen = settings.ui.startScreen || 'shift';
+  let currentScreen = 'shift';
 
   function switchScreen(name) {
     currentScreen = name;
@@ -410,11 +421,70 @@
       } else {
         form.appendChild(input);
       }
+
+      // inline error placeholder
+      form.appendChild(el('div', { class: 'field-error', dataset: { for: f.name } }));
     });
+
+    // validation (soft): disable Save until form is valid; show messages after blur/touch
+    const saveBtn = $('#saveModalBtn');
+    const touched = new Set();
+    const inputs = Array.from(form.querySelectorAll('input, textarea, select'));
+
+    const getMsg = (inp) => {
+      if (!inp) return 'Заполни поле';
+      if (inp.validity.valueMissing) return 'Обязательное поле';
+      if (inp.validity.patternMismatch) return 'Неверный формат';
+      if (inp.validity.tooShort) return 'Слишком коротко';
+      if (inp.validity.tooLong) return 'Слишком длинно';
+      return inp.validationMessage || 'Проверь значение';
+    };
+
+    const setError = (inp, show) => {
+      const err = form.querySelector(`.field-error[data-for="${CSS.escape(inp.name)}"]`);
+      if (!err) return;
+      if (show) {
+        err.textContent = getMsg(inp);
+        err.classList.add('show');
+      } else {
+        err.textContent = '';
+        err.classList.remove('show');
+      }
+    };
+
+    const updateValidityUI = () => {
+      const ok = form.checkValidity();
+      if (saveBtn) saveBtn.disabled = !ok;
+      inputs.forEach((inp) => {
+        if (!inp.name) return;
+        const show = touched.has(inp.name) && !inp.checkValidity();
+        setError(inp, show);
+      });
+    };
+
+    inputs.forEach((inp) => {
+      if (!inp.name) return;
+      inp.addEventListener('input', updateValidityUI);
+      inp.addEventListener('blur', () => {
+        touched.add(inp.name);
+        updateValidityUI();
+      });
+    });
+
+    // initial state
+    updateValidityUI();
+
 
     // submit
     const submitHandler = (ev) => {
       ev.preventDefault();
+      if (!form.checkValidity()) {
+        // show errors for all invalid fields
+        inputs.forEach((inp) => inp.name && touched.add(inp.name));
+        updateValidityUI();
+        if (form.reportValidity) form.reportValidity();
+        return;
+      }
       const fd = new FormData(form);
       const obj = Object.fromEntries(fd.entries());
       onSubmit(obj);
@@ -440,6 +510,84 @@
   }
 
   $('#cancelModal').addEventListener('click', closeModal);
+
+  // ==============================
+  // About sheet
+  // ==============================
+  function openAboutSheet() {
+    const sheet = $('#aboutSheet');
+    if (!sheet) return;
+    const ver = $('#aboutVersion');
+    if (ver) ver.textContent = VERSION_LABEL;
+
+    sheet.classList.remove('hidden');
+    // allow transition
+    requestAnimationFrame(() => sheet.classList.add('show'));
+
+    document.body.classList.add('modal-open');
+  }
+
+  function closeAboutSheet() {
+    const sheet = $('#aboutSheet');
+    if (!sheet) return;
+    sheet.classList.remove('show');
+    setTimeout(() => {
+      sheet.classList.add('hidden');
+      document.body.classList.remove('modal-open');
+    }, 170);
+  }
+
+  function openTelegram() {
+    const user = 'makilema';
+    const deep = `tg://resolve?domain=${user}`;
+    const web = `https://t.me/${user}`;
+    // try deep link first; fallback shortly after
+    window.location.href = deep;
+    setTimeout(() => {
+      // if Telegram isn't installed, iOS will ignore; open web
+      window.open(web, '_blank', 'noopener');
+    }, 350);
+  }
+
+  async function copyAboutInfo() {
+    const text = `ShiftManager — ${VERSION_LABEL} • Разработчик: Калмыков Д. • Telegram: @makilema`;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Скопировано');
+    } catch {
+      // fallback
+      const ta = el('textarea', { class: 'hidden' });
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); toast('Скопировано'); } catch {}
+      ta.remove();
+    }
+  }
+
+  function initAboutSheetUI() {
+    const sheet = $('#aboutSheet');
+    if (!sheet) return;
+
+    sheet.addEventListener('click', (e) => {
+      const t = e.target;
+      if (t && t.getAttribute && t.getAttribute('data-sheet-close') === 'true') closeAboutSheet();
+    });
+
+    const tgBtn = $('#tgOpenBtn');
+    if (tgBtn) tgBtn.addEventListener('click', openTelegram);
+
+    const tgContact = $('#tgContactBtn');
+    if (tgContact) tgContact.addEventListener('click', openTelegram);
+
+    const copyBtn = $('#copyInfoBtn');
+    if (copyBtn) copyBtn.addEventListener('click', copyAboutInfo);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !sheet.classList.contains('hidden')) closeAboutSheet();
+    });
+  }
+
 
   // ==============================
   // Field config
@@ -812,7 +960,6 @@
     root.innerHTML = '';
 
     const q = deliveredQuery.trim().toLowerCase();
-    const show = settings.ui.deliveredFields;
 
     const items = data.delivered
       .map((d) => ({ d }))
@@ -848,11 +995,11 @@
     }
 
     items.forEach(({ d }) => {
-      const title = (show.fio ? (d.name || '').trim() : '') || 'Доставленные';
+      const title = (d.name || '').trim() || 'Доставленные';
 
       const details = [];
-      if (show.time) details.push(['Время', d.time]);
-      if (show.reason) details.push(['Основание', d.reason]);
+      details.push(['Время', d.time]);
+      details.push(['Основание', d.reason]);
 
       const card = el('div', { class: 'card', role: 'listitem' }, [
         el('div', { class: 'card-title', text: title }),
@@ -883,7 +1030,6 @@
     root.innerHTML = '';
 
     const q = assistQuery.trim().toLowerCase();
-    const show = settings.ui.assistFields || {};
 
     const items = (data.assists || [])
       .map((a) => ({ a }))
@@ -923,10 +1069,10 @@
 
     items.forEach(({ a }) => {
       const details = [];
-      if (show.service) details.push(['Служба', a.service]);
-      if (show.note) details.push(['Заметка', a.note]);
-      if (show.start || show.end) details.push(['Время', `${a.start || '—'} — ${a.end || '—'}`]);
-      if (show.delta) details.push(['Δ', formatMinutes(Number(a.minutes) || diffWithMidnight(a.start, a.end) || 0)]);
+      details.push(['Служба', a.service]);
+      details.push(['Заметка', a.note]);
+      details.push(['Время', `${a.start || '—'} — ${a.end || '—'}`]);
+      details.push(['Δ', formatMinutes(Number(a.minutes) || diffWithMidnight(a.start, a.end) || 0)]);
 
       const title = (a.service || 'Содействие').trim();
 
@@ -1106,85 +1252,37 @@
 
   // ---------- Settings UI ----------
   function renderSettingsMeta() {
-    $('#appVersion').textContent = `v${APP_VERSION}`;
-    renderShiftStats();
-    renderArchive();
-
-    // checklist
-    buildChecklist('reqFields', REQUEST_FIELD_META, settings.ui.requestFields, (k, v) => {
-      settings.ui.requestFields[k] = v;
-    dispatch(null, { data: false, settings: true });
-    });
-
-    buildChecklist('delFields', DELIVERED_FIELD_META, settings.ui.deliveredFields, (k, v) => {
-      settings.ui.deliveredFields[k] = v;
-    dispatch(null, { data: false, settings: true });
-    });
-
-
-    buildChecklist('assistFields', ASSIST_FIELD_META, settings.ui.assistFields, (k, v) => {
-      settings.ui.assistFields[k] = v;
-    dispatch(null, { data: false, settings: true });
-    });
-
-
-    // compact
-    const compactToggle = $('#compactToggle');
-    if (compactToggle) {
-      compactToggle.checked = !!settings.ui.compact;
+    const vbtn = $('#appVersionBtn') || $('#appVersion');
+    if (vbtn) {
+      vbtn.textContent = VERSION_LABEL;
+      vbtn.title = 'О приложении';
     }
-
-    const startSel = $('#startScreenSelect');
-    if (startSel) startSel.value = settings.ui.startScreen || 'shift';
+    renderShiftStats();
   }
 
   function initSettingsUI() {
-    $('#exportBtn').addEventListener('click', exportData);
-    $('#importBtn').addEventListener('click', () => $('#importFile').click());
-    $('#importFile').addEventListener('change', importDataFromFile);
-    $('#clearBtn').addEventListener('click', clearAllData);
+    // Data tools
+    const exportBtn = $('#exportBtn');
+    if (exportBtn) exportBtn.addEventListener('click', exportData);
 
-    $('#exportShiftBtn').addEventListener('click', exportCurrentShift);
-    $('#closeShiftBtn').addEventListener('click', closeShift);
+    const importBtn = $('#importBtn');
+    const importFile = $('#importFile');
+    if (importBtn && importFile) importBtn.addEventListener('click', () => importFile.click());
+    if (importFile) importFile.addEventListener('change', importDataFromFile);
 
-    $('#editTypesBtn').addEventListener('click', () => editDictionary('types', 'Справочник: типы'));
-    $('#editResultsBtn').addEventListener('click', () => editDictionary('results', 'Справочник: результаты'));
-    $('#editReasonsBtn').addEventListener('click', () => editDictionary('reasons', 'Справочник: основания'));
-    $('#editServicesBtn').addEventListener('click', () => editDictionary('services', 'Справочник: службы'));
+    const clearBtn = $('#clearBtn');
+    if (clearBtn) clearBtn.addEventListener('click', clearAllData);
 
-    $('#compactToggle').addEventListener('change', (e) => {
-      settings.ui.compact = !!e.target.checked;
-      saveSettings();
-      applyCompact();
-      render();
-    });
+    // Shift tools
+    const exportShiftBtn = $('#exportShiftBtn');
+    if (exportShiftBtn) exportShiftBtn.addEventListener('click', exportCurrentShift);
 
-    $('#startScreenSelect').addEventListener('change', (e) => {
-      settings.ui.startScreen = e.target.value;
-      saveSettings();
-      toast('Сохранено');
-    });
+    const closeShiftBtn = $('#closeShiftBtn');
+    if (closeShiftBtn) closeShiftBtn.addEventListener('click', closeShift);
 
-    // archive actions (delegation)
-    $('#shiftArchive').addEventListener('click', (e) => {
-      const btn = e.target.closest('button');
-      if (!btn) return;
-      const action = btn.dataset.action;
-      const idx = Number(btn.dataset.index);
-      if (Number.isNaN(idx)) return;
-
-      if (action === 'exportShift') {
-        const s = data.shifts[idx];
-        if (!s) return;
-        download(`shiftmanager-archive-${s.closedAt}.json`, JSON.stringify(s, null, 2));
-      }
-      if (action === 'deleteShift') {
-        const ok = confirm('Удалить смену из архива?');
-        if (!ok) return;
-        data.shifts.splice(idx, 1);
-      dispatch();
-      }
-    });
+    // About
+    const vbtn = $('#appVersionBtn');
+    if (vbtn) vbtn.addEventListener('click', openAboutSheet);
   }
 
   // ---------- Lists click handling ----------
@@ -1234,22 +1332,14 @@
 
   // ---------- Service worker ----------
   function initServiceWorker() {
-    if (!('serviceWorker' in navigator)) {
-      $('#pwaStatus').textContent = 'Service Worker: недоступен';
-      return;
-    }
+    if (!('serviceWorker' in navigator)) return;
 
-    navigator.serviceWorker
-      .register('sw.js')
-      .then(() => updatePwaStatus())
-      .catch(() => ($('#pwaStatus').textContent = 'Service Worker: ошибка'));
+    // In WebView wrappers (Capacitor) SW can be disabled depending on scheme.
+    // Register only in typical web contexts.
+    const isHttp = location.protocol === 'https:' || location.protocol === 'http:';
+    if (!isHttp && location.hostname !== 'localhost') return;
 
-    $('#updateCacheBtn').addEventListener('click', async () => {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map((r) => r.update()));
-      toast('Запрошено обновление кэша');
-      updatePwaStatus();
-    });
+    navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
   async function updatePwaStatus() {
@@ -1313,6 +1403,7 @@
   initActions();
   initSearch();
   initSettingsUI();
+  initAboutSheetUI();
   initServiceWorker();
 
   // iOS PWA (added-to-home-screen) may restore the app from a snapshot / bfcache.

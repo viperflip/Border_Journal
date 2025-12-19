@@ -54,10 +54,10 @@
     <div id="assistsList" class="cards" role="list"></div>
   </main>
 
-<main id="screen-settings" class="screen" aria-label="Настройки">
+<main id="screen-settings" class="screen" aria-label="Инструменты">
     <header class="header">
-      <h2 class="screen-title">Настройки</h2>
-      <span class="muted" id="appVersion"></span>
+      <h2 class="screen-title">Инструменты</h2>
+      <button id="appVersionBtn" class="muted linklike" type="button" aria-label="О приложении"></button>
     </header>
 
     <section class="cards">
@@ -68,88 +68,6 @@
         <div class="card-actions">
           <button id="exportShiftBtn" class="edit" type="button">Отчёт JSON</button>
           <button id="closeShiftBtn" class="delete" type="button">Закрыть смену</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Архив смен</div>
-        <div class="card-meta">Сводка, экспорт и удаление</div>
-        <div id="shiftArchive" class="archive"></div>
-      </div>
-
-      
-
-      
-
-      
-      <div class="card">
-        <div class="card-title">Справочники</div>
-        <div class="card-meta">Быстрый ввод: типы, результаты и основания</div>
-        <div class="card-actions">
-          <button id="editTypesBtn" class="edit" type="button">Типы</button>
-          <button id="editResultsBtn" class="edit" type="button">Результаты</button>
-          <button id="editReasonsBtn" class="edit" type="button">Основания</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Отображение</div>
-        <div class="card-meta">Настройка карточек и экранов</div>
-        <div class="grid-2">
-          <div class="panel">
-            <div class="panel-title">Карточка «Смена»</div>
-            <div id="reqFields" class="checklist"></div>
-          </div>
-          <div class="panel">
-            <div class="panel-title">Карточка «Доставленные»</div>
-            <div id="delFields" class="checklist"></div>
-          </div>
-          <div class="panel">
-            <div class="panel-title">Карточка «Содействия»</div>
-            <div id="assistFields" class="checklist"></div>
-          </div>
-        </div>
-        <div class="row space-top">
-          <div>
-            <div class="card-title small">Компактный режим</div>
-            <div class="card-meta">Плотнее карточки и меньше отступов</div>
-          </div>
-          <label class="switch">
-            <input id="compactToggle" type="checkbox">
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="row space-top">
-          <div>
-            <div class="card-title small">Стартовый экран</div>
-            <div class="card-meta">Куда открывать приложение</div>
-          </div>
-          <select id="startScreenSelect" class="compact">
-            <option value="shift">Смена</option>
-            <option value="delivered">Доставленные</option>
-            <option value="assists">Содействия</option>
-            <option value="settings">Настройки</option>
-          </select>
-        </div>
-      </div>
-<div class="card">
-        <div class="card-title">Данные</div>
-        <div class="card-meta">Экспорт/импорт и очистка</div>
-        <div class="card-actions">
-          <button id="exportBtn" class="edit" type="button">Экспорт</button>
-          <button id="importBtn" class="edit" type="button">Импорт</button>
-        </div>
-        <div class="card-actions">
-          <button id="clearBtn" class="delete" type="button">Очистить всё</button>
-        </div>
-        <input id="importFile" type="file" accept="application/json" class="hidden">
-      </div>
-
-      <div class="card">
-        <div class="card-title">PWA</div>
-        <div class="card-meta" id="pwaStatus">Офлайн-кэш: …</div>
-        <div class="card-actions">
-          <button id="updateCacheBtn" class="edit" type="button">Обновить кэш</button>
         </div>
       </div>
     </section>
@@ -168,9 +86,9 @@
       <span class="nav-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12l2-2a3 3 0 1 1 4 4l-3 3"/><path d="M12 12l-2 2a3 3 0 1 1-4-4l3-3"/><path d="M14 14l-4-4"/></svg></span>
       <span class="nav-label">Содействия</span>
     </button>
-    <button data-screen="settings" class="nav-btn" type="button" aria-label="Настройки">
+    <button data-screen="settings" class="nav-btn" type="button" aria-label="Инструменты">
       <span class="nav-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.93 19.07 1.41-1.41"/><path d="m17.66 6.34 1.41-1.41"/></svg></span>
-      <span class="nav-label">Настройки</span>
+      <span class="nav-label">Инструменты</span>
     </button>
   </nav>
 
@@ -182,7 +100,43 @@
     <form id="modalForm"></form>
     <div class="modal-actions">
       <button id="cancelModal" type="button">Отмена</button>
-      <button type="submit" form="modalForm" class="primary">Сохранить</button>
+      <button id="saveModalBtn" type="submit" form="modalForm" class="primary" disabled>Сохранить</button>
+    </div>
+  </div>
+</div>
+
+
+<div id="aboutSheet" class="sheet hidden" role="dialog" aria-modal="true" aria-label="О приложении">
+  <div class="sheet-backdrop" data-sheet-close="true"></div>
+  <div class="sheet-panel" role="document">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="sheet-header">
+      <div>
+        <div class="sheet-title">ShiftManager</div>
+        <div id="aboutVersion" class="sheet-subtitle"></div>
+      </div>
+      <button class="sheet-close" type="button" aria-label="Закрыть" data-sheet-close="true">✕</button>
+    </div>
+
+    <div class="sheet-section">
+      <div class="sheet-text">Учёт смен и заявок. Работает оффлайн.</div>
+      <div class="sheet-text muted">Данные хранятся локально на устройстве.</div>
+    </div>
+
+    <div class="sheet-section">
+      <div class="sheet-row">
+        <div class="sheet-k">Разработчик</div>
+        <div class="sheet-v">Калмыков Д.</div>
+      </div>
+      <div class="sheet-row">
+        <div class="sheet-k">Контакт</div>
+        <button id="tgContactBtn" class="sheet-link" type="button">@makilema</button>
+      </div>
+    </div>
+
+    <div class="sheet-actions">
+      <button id="tgOpenBtn" class="primary" type="button">Связаться в Telegram</button>
+      <button id="copyInfoBtn" class="ghost" type="button">Скопировать информацию</button>
     </div>
   </div>
 </div>
