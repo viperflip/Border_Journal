@@ -145,6 +145,19 @@ h1{font-size:18px;margin:0}
 .edit{background:var(--btn)}
 .delete{background:var(--danger);color:#fff}
 
+
+.tool-actions{
+  display:flex;
+  gap:8px;
+  margin-top:10px;
+  flex-wrap:wrap;
+}
+
+.tool-actions button{
+  flex:1;
+  min-width:140px;
+}
+
 .bottom-nav{
   position:fixed;
   left:12px;
@@ -655,3 +668,7 @@ button:disabled{
   .sheet{transition:none!important}
 }
 
+/* Hotfix 3.1.5: spacing between actions and data card in Tools */
+#screen-settings .card-actions + .card {
+  margin-top: 16px;
+}

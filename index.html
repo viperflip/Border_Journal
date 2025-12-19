@@ -69,7 +69,24 @@
           <button id="exportShiftBtn" class="edit" type="button">Отчёт JSON</button>
           <button id="closeShiftBtn" class="delete" type="button">Закрыть смену</button>
         </div>
+      
+      <div class="card">
+        <div class="card-title">Данные</div>
+        <div class="card-meta">Экспорт/импорт и резервная копия</div>
+        <div id="backupMeta" class="card-details muted"></div>
+
+        <div class="tool-actions">
+          <button id="exportBtn" class="primary" type="button">Экспорт JSON</button>
+          <button id="importBtn" class="ghost" type="button">Импорт JSON</button>
+          <input id="importFile" type="file" accept="application/json" class="hidden" aria-hidden="true">
+        </div>
+
+        <div class="tool-actions">
+          <button id="backupCreateBtn" class="ghost" type="button">Создать бэкап</button>
+          <button id="backupRestoreBtn" class="ghost" type="button" disabled>Восстановить</button>
+        </div>
       </div>
+</div>
     </section>
   </main>
 

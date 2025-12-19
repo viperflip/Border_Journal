@@ -4,7 +4,7 @@
   // ==============================
   // Constants
   // ==============================
-  const APP_VERSION = '3.1.3';
+  const APP_VERSION = '3.1.5';
   const DATA_KEY = 'shift_manager_data_v2';
   const SETTINGS_KEY = 'shift_manager_settings_v2';
 
@@ -1189,7 +1189,15 @@ return s;
   }
 
   function exportData() {
-    download(`shiftmanager-backup-${Date.now()}.json`, JSON.stringify({ data, settings }, null, 2));
+    const payload = {
+      app: 'ShiftManager',
+      appVersion: APP_VERSION,
+      schemaVersion: 2,
+      exportedAt: new Date().toISOString(),
+      data,
+      settings
+    };
+    download(`shiftmanager-backup-${Date.now()}.json`, JSON.stringify(payload, null, 2));
   }
 
   function exportCurrentShift() {
@@ -1200,16 +1208,24 @@ return s;
     const file = ev.target.files?.[0];
     ev.target.value = '';
     if (!file) return;
+
+    // Safety: keep a local backup before overwriting anything
+    try { addBackup(JSON.parse(JSON.stringify(data))); } catch {}
+
     try {
       const text = await file.text();
       const obj = JSON.parse(text);
 
-      if (obj.data) data = migrateData(obj.data);
-      if (obj.settings) settings = { ...defaultSettings(), ...obj.settings };
+      // Support both modern and legacy export formats
+      const importedData = obj?.data ? obj.data : null;
+      const importedSettings = obj?.settings ? obj.settings : null;
 
-      saveData();
+      if (importedData) data = migrateData(importedData);
+      if (importedSettings) settings = { ...defaultSettings(), ...importedSettings };
+
+      persistDataNow();
       saveSettings();
-      applyCompact();
+      renderBackupMeta();
       render();
       toast('Импортировано');
     } catch {
@@ -1250,6 +1266,66 @@ return s;
     });
   }
 
+  // ---------- Backups (manual tools) ----------
+
+  function formatDateTime(ts) {
+    try {
+      return new Date(ts).toLocaleString('ru-RU', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    } catch {
+      return '';
+    }
+  }
+
+  function renderBackupMeta() {
+    const elMeta = $('#backupMeta');
+    const restoreBtn = $('#backupRestoreBtn');
+    if (!elMeta && !restoreBtn) return;
+
+    const list = loadBackups();
+    const latest = list[0];
+    if (!latest) {
+      if (elMeta) elMeta.textContent = 'Резервных копий ещё нет';
+      if (restoreBtn) restoreBtn.disabled = true;
+      return;
+    }
+
+    const label = formatDateTime(latest.ts);
+    if (elMeta) elMeta.textContent = `Последняя копия: ${label} · всего: ${list.length}`;
+    if (restoreBtn) restoreBtn.disabled = false;
+  }
+
+  function createManualBackup() {
+    try {
+      addBackup(JSON.parse(JSON.stringify(data)));
+      renderBackupMeta();
+      toast('Резервная копия создана');
+    } catch {
+      toast('Не удалось создать резервную копию');
+    }
+  }
+
+  function restoreLatestBackup() {
+    const list = loadBackups();
+    const latest = list[0];
+    if (!latest?.data) {
+      toast('Нет резервной копии');
+      return;
+    }
+    const ok = confirm('Восстановить данные из последней резервной копии? Текущие данные будут заменены.');
+    if (!ok) return;
+
+    try {
+      data = migrateData(latest.data);
+      persistDataNow();
+      renderBackupMeta();
+      render();
+      toast('Восстановлено из резервной копии');
+    } catch {
+      toast('Не удалось восстановить резервную копию');
+    }
+  }
+
+
   // ---------- Settings UI ----------
   function renderSettingsMeta() {
     const vbtn = $('#appVersionBtn') || $('#appVersion');
@@ -1258,6 +1334,7 @@ return s;
       vbtn.title = 'О приложении';
     }
     renderShiftStats();
+    renderBackupMeta();
   }
 
   function initSettingsUI() {
@@ -1269,9 +1346,13 @@ return s;
     const importFile = $('#importFile');
     if (importBtn && importFile) importBtn.addEventListener('click', () => importFile.click());
     if (importFile) importFile.addEventListener('change', importDataFromFile);
+    // Manual backup
+    const backupCreateBtn = $('#backupCreateBtn');
+    if (backupCreateBtn) backupCreateBtn.addEventListener('click', createManualBackup);
 
-    const clearBtn = $('#clearBtn');
-    if (clearBtn) clearBtn.addEventListener('click', clearAllData);
+    const backupRestoreBtn = $('#backupRestoreBtn');
+    if (backupRestoreBtn) backupRestoreBtn.addEventListener('click', restoreLatestBackup);
+
 
     // Shift tools
     const exportShiftBtn = $('#exportShiftBtn');
