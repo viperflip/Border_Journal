@@ -413,3 +413,46 @@ body.compact .toolbar{gap:8px}
   align-items:center;
   font-weight:800;
 }
+
+/* ---------- Empty states ---------- */
+.empty-state{
+  margin:12px;
+  padding:18px 14px;
+  border:1px dashed var(--border);
+  border-radius:18px;
+  background:rgba(2,6,23,.22);
+  text-align:center;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:10px;
+}
+
+.empty-ico{
+  width:46px;
+  height:46px;
+  border-radius:16px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(148,163,184,.14);
+  background:rgba(148,163,184,.06);
+  color:rgba(148,163,184,.85);
+}
+
+.empty-ico svg{width:22px;height:22px}
+
+.empty-title{font-weight:800;letter-spacing:.2px}
+.empty-desc{font-size:13px;color:var(--muted);line-height:1.35}
+
+.empty-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:2px}
+
+.ghost{
+  border:1px solid var(--border);
+  background:rgba(148,163,184,.08);
+  color:var(--text);
+  padding:10px 14px;
+  border-radius:12px;
+  font-weight:600;
+  transition:transform .08s ease, opacity .08s ease;
+}
+.ghost:active{transform:scale(0.97);opacity:.85}

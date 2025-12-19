@@ -92,6 +92,51 @@
     }, 1600);
   }
 
+  // ---------- Empty states ----------
+  // Small lucide-style inline svgs (currentColor, stroke only)
+  const EMPTY_SVGS = {
+    requests:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+      + '<path d="M14 2v6h6"/>'
+      + '<path d="M8 13h8"/>'
+      + '<path d="M8 17h5"/>'
+      + '</svg>',
+    delivered:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + '<circle cx="12" cy="12" r="9"/>'
+      + '<path d="m8.5 12.5 2.5 2.5 5-6"/>'
+      + '</svg>',
+    assists:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + '<path d="M12 12l2-2a3 3 0 1 1 4 4l-3 3"/>'
+      + '<path d="M12 12l-2 2a3 3 0 1 1-4-4l3-3"/>'
+      + '<path d="M14 14l-4-4"/>'
+      + '</svg>',
+    search:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + '<circle cx="11" cy="11" r="8"/>'
+      + '<path d="m21 21-4.3-4.3"/>'
+      + '</svg>'
+  };
+
+  function makeEmptyState({ icon = 'requests', title, desc, actionText, onAction, secondaryText, onSecondary } = {}) {
+    const actions = [];
+    if (actionText && typeof onAction === 'function') {
+      actions.push(el('button', { class: 'primary', type: 'button', onclick: onAction, 'aria-label': actionText }, [actionText]));
+    }
+    if (secondaryText && typeof onSecondary === 'function') {
+      actions.push(el('button', { class: 'ghost', type: 'button', onclick: onSecondary, 'aria-label': secondaryText }, [secondaryText]));
+    }
+
+    return el('div', { class: 'empty-state', role: 'status', 'aria-live': 'polite' }, [
+      el('div', { class: 'empty-ico', html: EMPTY_SVGS[icon] || EMPTY_SVGS.requests }),
+      el('div', { class: 'empty-title', text: title || '' }),
+      desc ? el('div', { class: 'empty-desc', text: desc }) : null,
+      actions.length ? el('div', { class: 'empty-actions' }, actions) : null
+    ]);
+  }
+
   // ---------- Data / Settings ----------
   const defaultData = () => ({ v: 2, requests: [], delivered: [], assists: [], shifts: [] });
 
@@ -691,6 +736,31 @@
         return hay.includes(q);
       });
 
+    if (!items.length) {
+      if (q) {
+        root.appendChild(
+          makeEmptyState({
+            icon: 'search',
+            title: 'Ничего не найдено',
+            desc: 'Попробуй изменить запрос или сбрось поиск.',
+            actionText: 'Сбросить поиск',
+            onAction: () => dispatch(() => (requestQuery = ''), { data: false, settings: false })
+          })
+        );
+      } else {
+        root.appendChild(
+          makeEmptyState({
+            icon: 'requests',
+            title: 'Пока нет заявок',
+            desc: 'Добавь первую заявку — она появится здесь.',
+            actionText: '+ Заявка',
+            onAction: () => openRequestModal(null)
+          })
+        );
+      }
+      return;
+    }
+
     items.forEach(({ r }) => {
       const title = `Заявка №${(r.num || '').trim()}`.trim();
 
@@ -752,6 +822,31 @@
         return hay.includes(q);
       });
 
+    if (!items.length) {
+      if (q) {
+        root.appendChild(
+          makeEmptyState({
+            icon: 'search',
+            title: 'Ничего не найдено',
+            desc: 'Попробуй изменить запрос или сбрось поиск.',
+            actionText: 'Сбросить поиск',
+            onAction: () => dispatch(() => (deliveredQuery = ''), { data: false, settings: false })
+          })
+        );
+      } else {
+        root.appendChild(
+          makeEmptyState({
+            icon: 'delivered',
+            title: 'Пока пусто',
+            desc: 'Добавь первую запись — она появится здесь.',
+            actionText: '+ Добавить',
+            onAction: () => openDeliveredModal(null)
+          })
+        );
+      }
+      return;
+    }
+
     items.forEach(({ d }) => {
       const title = (show.fio ? (d.name || '').trim() : '') || 'Доставленные';
 
@@ -802,7 +897,27 @@
     totalEl.textContent = `Итого за смену: ${formatMinutes(totalMins)}`;
 
     if (!items.length) {
-      root.appendChild(el('div', { class: 'muted', text: 'Пока нет содействий' }));
+      if (q) {
+        root.appendChild(
+          makeEmptyState({
+            icon: 'search',
+            title: 'Ничего не найдено',
+            desc: 'Попробуй изменить запрос или сбрось поиск.',
+            actionText: 'Сбросить поиск',
+            onAction: () => dispatch(() => (assistQuery = ''), { data: false, settings: false })
+          })
+        );
+      } else {
+        root.appendChild(
+          makeEmptyState({
+            icon: 'assists',
+            title: 'Пока нет содействий',
+            desc: 'Добавь первое содействие — оно появится здесь.',
+            actionText: '+ Содействие',
+            onAction: () => openAssistModal(null)
+          })
+        );
+      }
       return;
     }
 
