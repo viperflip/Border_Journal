@@ -1314,5 +1314,14 @@
   initSearch();
   initSettingsUI();
   initServiceWorker();
+
+  // iOS PWA (added-to-home-screen) may restore the app from a snapshot / bfcache.
+  // In that case the DOM can appear without a fresh paint until the next interaction.
+  // Re-render on show/focus to ensure empty-states and lists are visible immediately.
+  window.addEventListener('pageshow', () => render(), { passive: true });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) render();
+  }, { passive: true });
+
   switchScreen(currentScreen);
 })();
