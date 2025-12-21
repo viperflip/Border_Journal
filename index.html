@@ -10,6 +10,19 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Initial app splash (shown immediately, hidden by JS) -->
+  <div id="app-splash" aria-hidden="true">
+    <div class="splash-wrap">
+      <div class="splash-logo" aria-label="ShiftManager">
+        <span class="splash-shift">Shift</span><span class="splash-manager">Manager</span>
+      </div>
+      <div class="splash-console" aria-live="polite" aria-atomic="true">
+        <span class="splash-loading">загрузка</span>
+        <span class="splash-spin" id="splashSpin" aria-hidden="true">|</span>
+      </div>
+    </div>
+  </div>
+
 <div id="app">
   <header class="topbar" role="banner">
     <div class="brand">

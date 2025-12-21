@@ -4,7 +4,7 @@
   // ==============================
   // Constants
   // ==============================
-  const APP_VERSION = '3.1.5';
+  const APP_VERSION = '3.1.6';
   const DATA_KEY = 'shift_manager_data_v2';
   const SETTINGS_KEY = 'shift_manager_settings_v2';
 
@@ -96,6 +96,58 @@
       setTimeout(() => t.remove(), 250);
     }, 1600);
   }
+
+  // ==============================
+  // Splash (initial loader)
+  // ==============================
+  const SPLASH_MIN_MS = 1200; // "серьёзность" 😅
+  let splashTimerDone = false;
+  let splashAppReady = false;
+  let splashSpinTimer = null;
+
+  function startSplashSpinner() {
+    const spinEl = document.getElementById('splashSpin');
+    if (!spinEl) return;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    if (reduceMotion) {
+      spinEl.textContent = '|';
+      return;
+    }
+    const frames = ['|', '/', '-', '\\'];
+    let i = 0;
+    splashSpinTimer = window.setInterval(() => {
+      i = (i + 1) % frames.length;
+      spinEl.textContent = frames[i];
+    }, 120);
+  }
+
+  function stopSplashSpinner() {
+    if (splashSpinTimer) {
+      clearInterval(splashSpinTimer);
+      splashSpinTimer = null;
+    }
+  }
+
+  function maybeHideSplash() {
+    if (!splashTimerDone || !splashAppReady) return;
+    const splash = document.getElementById('app-splash');
+    if (!splash) return;
+    splash.classList.add('hide');
+    stopSplashSpinner();
+    setTimeout(() => splash.remove(), 220);
+  }
+
+  function markAppReady() {
+    splashAppReady = true;
+    maybeHideSplash();
+  }
+
+  // start timer immediately (script is at end of body)
+  startSplashSpinner();
+  setTimeout(() => {
+    splashTimerDone = true;
+    maybeHideSplash();
+  }, SPLASH_MIN_MS);
 
   // ---------- Empty states ----------
   // Small lucide-style inline svgs (currentColor, stroke only)
@@ -1496,4 +1548,6 @@ return s;
   }, { passive: true });
 
   switchScreen(currentScreen);
+  // Hide splash after first paint AND after minimal delay.
+  markAppReady();
 })();

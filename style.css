@@ -672,3 +672,57 @@ button:disabled{
 #screen-settings .card-actions + .card {
   margin-top: 16px;
 }
+
+/* ==============================
+   Initial splash (PWA start)
+   ============================== */
+#app-splash{
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #000;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+
+#app-splash.hide{
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-wrap{
+  text-align: center;
+  padding: 24px;
+}
+
+.splash-logo{
+  font-size: 28px;
+  font-weight: 750;
+  letter-spacing: 0.2px;
+  line-height: 1.15;
+}
+
+.splash-manager{
+  color: var(--accent);
+}
+
+.splash-console{
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  color: rgba(255,255,255,.75);
+  letter-spacing: 0.1px;
+}
+
+.splash-spin{
+  width: 1ch;
+  text-align: center;
+  color: #fff;
+  opacity: 0.95;
+}
