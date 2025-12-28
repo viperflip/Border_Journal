@@ -4,7 +4,7 @@
   // ==============================
   // Constants
   // ==============================
-  const APP_VERSION = '3.1.7';
+  const APP_VERSION = '3.2.7';
   const DATA_KEY = 'shift_manager_data_v2';
   const SETTINGS_KEY = 'shift_manager_settings_v2';
 
@@ -84,17 +84,39 @@
     return `${hh}:${mm}`;
   }
 
-  function toast(msg) {
-    // очень лёгкий toast без зависимостей
-    const t = el('div', { class: 'toast', text: msg });
-    t.setAttribute('role','status');
-    t.setAttribute('aria-live','polite');
+  // Toasts (with icons)
+  let activeToast = null;
+  const TOAST_ICONS = {
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+    success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>',
+    warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+    error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>'
+  };
+
+  function toast(msg, type = 'info') {
+    const t = el('div', { class: `toast toast-${type}` });
+    t.setAttribute('role', 'status');
+    t.setAttribute('aria-live', 'polite');
+    t.innerHTML = `
+      <span class="toast-ico" aria-hidden="true">${TOAST_ICONS[type] || TOAST_ICONS.info}</span>
+      <span class="toast-msg"></span>
+    `;
+    t.querySelector('.toast-msg').textContent = String(msg ?? '');
+
+    if (activeToast) {
+      activeToast.remove();
+      activeToast = null;
+    }
+    activeToast = t;
     document.body.appendChild(t);
     requestAnimationFrame(() => t.classList.add('show'));
     setTimeout(() => {
       t.classList.remove('show');
-      setTimeout(() => t.remove(), 250);
-    }, 1600);
+      setTimeout(() => {
+        if (t === activeToast) activeToast = null;
+        t.remove();
+      }, 250);
+    }, 1700);
   }
 
   // ==============================
@@ -400,6 +422,9 @@ return s;
   // ---------- Navigation ----------
   let currentScreen = 'shift';
 
+  // UI-only state (not persisted)
+  const requestOpenState = new Map(); // id -> boolean
+
   function switchScreen(name) {
     currentScreen = name;
     for (const scr of document.querySelectorAll('.screen')) {
@@ -436,6 +461,16 @@ return s;
       if (f.type === 'textarea') {
         input = el('textarea', common);
         input.value = initial;
+      } else if (f.type === 'select') {
+        input = el('select', common);
+        const opts = Array.isArray(f.options) ? f.options : [];
+        // If nothing is selected yet, default to first option.
+        const current = initial || (opts[0] ?? '');
+        opts.forEach((val) => {
+          const opt = el('option', { value: String(val), text: String(val) });
+          if (String(val) === String(current)) opt.selected = true;
+          input.appendChild(opt);
+        });
       } else {
         input = el('input', {
           ...common,
@@ -701,8 +736,8 @@ return s;
     const init = r ? { ...r } : {};
 
     const fields = [
-      { label: 'Номер', name: 'num', required: true, type: 'text', inputmode: 'numeric', pattern: '^[0-9]+$' },
-      { label: 'Тип', name: 'type', type: 'text', datalistId: 'dlType', datalistOptions: settings.dict.types || [] },
+      // Номер теперь автоматически отображается в списке (сверху вниз: N..1). Поле вручную не вводим.
+      { label: 'Тип', name: 'type', type: 'select', options: ['А', 'У'], required: true },
       { label: 'КУСП', name: 'kusp', type: 'text' },
       { label: 'Адрес', name: 'addr', type: 'text', required: true },
       { label: 'Описание', name: 'desc', type: 'textarea' },
@@ -720,8 +755,9 @@ return s;
         const prev = r || null;
         const obj = {
           id: prev?.id || newId(),
-          num: (o.num || '').toString().trim(),
-          type: (o.type || '').toString().trim(),
+          // num оставляем для обратной совместимости, но больше не требуем и не используем как "порядковый".
+          num: (prev?.num || '').toString().trim(),
+          type: (o.type || 'А').toString().trim(),
           kusp: (o.kusp || '').toString().trim(),
           addr: (o.addr || '').toString().trim(),
           desc: (o.desc || '').toString().trim(),
@@ -733,21 +769,19 @@ return s;
           createdAt: prev?.createdAt || Date.now()
         };
 
-        if (!obj.num || !/^\d+$/.test(obj.num)) {
-          toast('Номер должен быть цифрами');
-          return;
-        }
+        // Номер больше не обязателен.
         if (!obj.addr) {
-          toast('Адрес обязателен');
+          toast('Адрес обязателен', 'warning');
           return;
         }
 
-        if (obj.type) pushDict('type', obj.type);
         if (obj.result) pushDict('result', obj.result);
 
         if (isEdit && index >= 0) data.requests[index] = obj;
         else data.requests.unshift(obj);
-      dispatch();
+
+        toast('Сохранено', 'success');
+        dispatch();
       }
     });
   }
@@ -961,8 +995,12 @@ return s;
       return;
     }
 
-    items.forEach(({ r }) => {
-      const title = `Заявка №${(r.num || '').trim()}`.trim();
+    const total = items.length;
+    items.forEach(({ r }, idx) => {
+      const inWork = !String(r.t3 || '').trim();
+      const isOpen = requestOpenState.has(String(r.id)) ? !!requestOpenState.get(String(r.id)) : inWork;
+      const num = total - idx; // обратная нумерация (свежие сверху)
+      const headerTitle = `${num}. ${(r.addr || '').trim() || 'Без адреса'}`;
 
       const details = [];
       if (show.type) details.push(['Тип', r.type]);
@@ -976,8 +1014,7 @@ return s;
       if (show.t2 && r.t2) chips.push(`t2: ${r.t2}`);
       if (show.t3 && r.t3) chips.push(`t3: ${r.t3}`);
 
-      const card = el('div', { class: 'card', role: 'listitem' }, [
-        el('div', { class: 'card-title', text: title }),
+      const body = el('div', { class: 'acc-body', ...(isOpen ? {} : { hidden: 'hidden' }) }, [
         details.length
           ? el(
               'div',
@@ -990,17 +1027,31 @@ return s;
             )
           : el('div', { class: 'card-meta', text: 'Нет данных' }),
         chips.length ? el('div', { class: 'chips' }, chips.map((t) => el('span', { class: 'chip', text: t }))) : null,
-
         el('div', { class: 'quick-actions' }, [
           el('button', { type: 'button', dataset: { action: 'stamp', stamp: 't1', scope: 'request', id: String(r.id) }, text: 'Выехал' }),
           el('button', { type: 'button', dataset: { action: 'stamp', stamp: 't2', scope: 'request', id: String(r.id) }, text: 'Прибыл' }),
           el('button', { type: 'button', dataset: { action: 'finish', scope: 'request', id: String(r.id) }, text: 'Завершил' })
         ]),
-
         el('div', { class: 'card-actions' }, [
           el('button', { class: 'edit', type: 'button', dataset: { action: 'edit', scope: 'request', id: String(r.id) }, text: 'Изменить' }),
           el('button', { class: 'delete', type: 'button', dataset: { action: 'delete', scope: 'request', id: String(r.id) }, text: 'Удалить' })
         ])
+      ]);
+
+      const card = el('div', { class: `card acc-card${inWork ? ' in-work' : ''}`, role: 'listitem' }, [
+        el('button', {
+          type: 'button',
+          class: 'acc-head',
+          dataset: { action: 'toggle', scope: 'request', id: String(r.id) },
+          'aria-expanded': isOpen ? 'true' : 'false'
+        }, [
+          el('span', { class: 'acc-title', text: headerTitle }),
+          el('span', { class: 'acc-right' }, [
+            inWork ? el('span', { class: 'acc-badge', title: 'В работе', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>' }) : null,
+            el('span', { class: 'acc-chevron', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>' })
+          ])
+        ]),
+        body
       ]);
 
       root.appendChild(card);
@@ -1159,6 +1210,8 @@ return s;
     if (!root) return;
 
     const total = data.requests.length;
+    const aCount = data.requests.filter((r) => String(r?.type || 'А').trim() === 'А').length;
+    const uCount = data.requests.filter((r) => String(r?.type || '').trim() === 'У').length;
     const del = data.delivered.length;
 
     const mins = data.requests
@@ -1169,7 +1222,12 @@ return s;
     const max = mins.length ? Math.max(...mins) : null;
 
     root.innerHTML = '';
-    root.appendChild(el('div', { class: 'kv' }, [el('div', { class: 'k', text: 'Заявок в смене' }), el('div', { class: 'v', text: String(total) })]));
+    root.appendChild(
+      el('div', { class: 'kv' }, [
+        el('div', { class: 'k', text: 'Заявок в смене' }),
+        el('div', { class: 'v', text: `${total} (${aCount}-А, ${uCount}-У)` })
+      ])
+    );
     root.appendChild(el('div', { class: 'kv' }, [el('div', { class: 'k', text: 'Доставленных' }), el('div', { class: 'v', text: String(del) })]));
     root.appendChild(el('div', { class: 'kv' }, [el('div', { class: 'k', text: 'Среднее t1→t3' }), el('div', { class: 'v', text: avg === null ? '—' : `${avg} мин` })]));
     root.appendChild(el('div', { class: 'kv' }, [el('div', { class: 'k', text: 'Максимум t1→t3' }), el('div', { class: 'v', text: max === null ? '—' : `${max} мин` })]));
@@ -1427,6 +1485,17 @@ return s;
     const id = btn.dataset.id;
     if (!id) return;
 
+    if (action === 'toggle' && scope === 'request') {
+      const key = String(id);
+      const current = requestOpenState.has(key) ? !!requestOpenState.get(key) : null;
+      const r = data.requests.find((x) => x && String(x.id) === key);
+      const inWork = r ? !String(r.t3 || '').trim() : false;
+      const next = current === null ? !inWork : !current;
+      requestOpenState.set(key, next);
+      renderRequests();
+      return;
+    }
+
     if (action === 'edit') {
       if (scope === 'request') openRequestModal(id);
       if (scope === 'delivered') openDeliveredModal(id);
@@ -1435,10 +1504,13 @@ return s;
       const ok = confirm('Удалить запись?');
       if (!ok) return;
       deleteItem(scope, id);
+      toast('Удалено', 'success');
     } else if (action === 'stamp') {
       stampTime(id, btn.dataset.stamp);
+      toast('Отметка времени', 'info');
     } else if (action === 'finish') {
       finishRequest(id);
+      toast('Завершено', 'success');
     }
   }
 
@@ -1530,24 +1602,30 @@ return s;
     renderSettingsMeta();
   }
 
-  // ---------- Init ----------
-  applyCompact();
-  initNav();
-  initActions();
-  initSearch();
-  initSettingsUI();
-  initAboutSheetUI();
-  initServiceWorker();
+  // ---------- Init (hardened: never hang on splash) ----------
+  try {
+    applyCompact();
+    initNav();
+    initActions();
+    initSearch();
+    initSettingsUI();
+    initAboutSheetUI();
+    initServiceWorker();
 
-  // iOS PWA (added-to-home-screen) may restore the app from a snapshot / bfcache.
-  // In that case the DOM can appear without a fresh paint until the next interaction.
-  // Re-render on show/focus to ensure empty-states and lists are visible immediately.
-  window.addEventListener('pageshow', () => render(), { passive: true });
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) render();
-  }, { passive: true });
+    // iOS PWA (added-to-home-screen) may restore the app from a snapshot / bfcache.
+    // In that case the DOM can appear without a fresh paint until the next interaction.
+    // Re-render on show/focus to ensure empty-states and lists are visible immediately.
+    window.addEventListener('pageshow', () => render(), { passive: true });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) render();
+    }, { passive: true });
 
-  switchScreen(currentScreen);
-  // Hide splash after first paint AND after minimal delay.
-  markAppReady();
+    switchScreen(currentScreen);
+  } catch (err) {
+    console.error('Init error:', err);
+    try { toast('Ошибка запуска', 'error'); } catch {}
+  } finally {
+    // Hide splash after first paint AND after minimal delay.
+    markAppReady();
+  }
 })();

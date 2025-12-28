@@ -1,5 +1,5 @@
 /* Simple offline cache for static assets */
-const CACHE_VERSION = 'v1.4.0';
+const CACHE_VERSION = 'v3.2.7';
 const CACHE_NAME = `shift-cache-${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -9,6 +9,7 @@ const ASSETS = [
   './script.js',
   './manifest.json',
   './icon-180.png',
+  './icon-192.png',
   './icon-512.png'
 ];
 

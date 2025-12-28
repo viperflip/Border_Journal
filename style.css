@@ -3,7 +3,8 @@
   position:fixed;
   top:0;left:0;right:0;
   padding:calc(14px + env(safe-area-inset-top)) 16px 10px;
-  background:rgba(2,6,23,.86);
+  /* Keep the top bar visually light so the global background gradient reads through */
+  background:rgba(2,6,23,.35);
   backdrop-filter:blur(14px);
   border-bottom:1px solid var(--border);
   z-index:20;
@@ -22,13 +23,16 @@
   --accent:#22c55e;
   --btn:#334155;
   --danger:#7f1d1d;
+  --shadow1: 0 10px 30px rgba(0,0,0,.28);
+  --shadow2: 0 18px 60px rgba(0,0,0,.45);
+  --inset1: inset 0 1px 0 rgba(255,255,255,.06);
 }
 
 body{
   margin:0;
   color-scheme: dark;
   font-family:-apple-system,BlinkMacSystemFont,Inter,Arial,sans-serif;
-  background:var(--bg);
+  background: radial-gradient(900px 520px at 20% -10%, rgba(34,197,94,.10), transparent 60%), radial-gradient(800px 520px at 90% 0%, rgba(56,189,248,.06), transparent 55%), var(--bg);
   color:var(--text);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -83,12 +87,63 @@ h1{font-size:18px;margin:0}
 }
 
 .card{
-  background:var(--surface);
+  /* Subtle gradient for depth, without changing layout */
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 70%),
+    var(--surface);
   border:1px solid var(--border);
   border-radius:16px;
   padding:12px;
+  box-shadow: var(--inset1), var(--shadow1);
   animation:cardIn .18s ease;
 }
+
+/* ---------- Accordion cards (Requests) ---------- */
+.acc-card{padding:0; overflow:hidden;}
+.acc-card.in-work{position:relative;}
+.acc-card.in-work::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:4px;
+  background:rgba(250,204,21,.95); /* yellow */
+}
+
+.acc-head{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:12px;
+  background:transparent;
+  border:none;
+  color:var(--text);
+  text-align:left;
+  font-weight:700;
+}
+.acc-title{font-size:14px; line-height:1.2; padding-left:2px;}
+.acc-right{display:flex; align-items:center; gap:10px;}
+.acc-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:28px;
+  height:28px;
+  border-radius:999px;
+  border:1px solid rgba(250,204,21,.35);
+  background:rgba(250,204,21,.10);
+  color:#facc15;
+}
+.acc-badge svg{width:16px;height:16px}
+.acc-chevron{display:inline-flex;align-items:center;justify-content:center; opacity:.9;}
+.acc-chevron svg{width:18px;height:18px; transition:transform .18s ease;}
+.acc-head[aria-expanded="true"] .acc-chevron svg{transform:rotate(180deg)}
+
+.acc-body{padding:0 12px 12px; border-top:1px solid var(--border);}
+
 
 @keyframes cardIn{
   from{transform:translateY(6px);opacity:0}
@@ -123,6 +178,8 @@ h1{font-size:18px;margin:0}
   font-weight:650;
   font-size:12px;
   transition:transform .08s ease, opacity .08s ease;
+  border:1px solid rgba(148,163,184,.14);
+  box-shadow: var(--inset1), 0 10px 22px rgba(0,0,0,.22);
 }
 .quick-actions button:active{transform:scale(.97);opacity:.85}
 
@@ -226,6 +283,7 @@ h1{font-size:18px;margin:0}
 .modal-content{
   background:var(--surface);
   border-radius:18px;
+  box-shadow: var(--shadow2);
   width:92%;
   max-height:min(92vh, 720px);
   overflow:auto;
@@ -393,14 +451,30 @@ body.compact .toolbar{gap:8px}
   opacity:0;
   padding:10px 12px;
   border-radius:14px;
+  box-shadow: var(--shadow2);
   border:1px solid var(--border);
   background:rgba(2,6,23,.92);
   color:var(--text);
   backdrop-filter:blur(12px);
-  z-index:999;
+  z-index:9999;
   transition:opacity .2s ease, transform .2s ease;
   font-size:13px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  max-width:min(520px, calc(100vw - 24px));
 }
+.toast-ico{width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;opacity:.95}
+.toast-ico svg{width:18px;height:18px}
+.toast-msg{line-height:1.25}
+.toast-info{border-color:rgba(56,189,248,.35)}
+.toast-success{border-color:rgba(34,197,94,.35)}
+.toast-warning{border-color:rgba(250,204,21,.35)}
+.toast-error{border-color:rgba(244,63,94,.35)}
+.toast-warning .toast-ico{color:#facc15}
+.toast-success .toast-ico{color:#22c55e}
+.toast-error .toast-ico{color:#fb7185}
+.toast-info .toast-ico{color:#38bdf8}
 .toast.show{
   opacity:1;
   transform:translateX(-50%) translateY(0);
@@ -485,6 +559,9 @@ body.compact .toolbar{gap:8px}
    ============================== */
 :root{
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --shadow1: 0 10px 30px rgba(0,0,0,.28);
+  --shadow2: 0 18px 60px rgba(0,0,0,.45);
+  --inset1: inset 0 1px 0 rgba(255,255,255,.06);
 }
 
 .bottom-nav{
